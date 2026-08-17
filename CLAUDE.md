@@ -1,5 +1,53 @@
 @AGENTS.md
 
+# Working agreement
+
+How work gets done here. These rules apply before any of the code conventions below, and they
+apply to every task — a change being small is not an exemption.
+
+## Ask rather than assume
+
+Ask about **every choice the request and this repository do not already settle** — including
+reversible ones, and including forks discovered mid-task. Filling a gap with a sensible default
+and mentioning it afterwards is still an assumption; it just moves the surprise later.
+
+- Batch the questions visible upfront and ask them before starting. A round trip is cheaper than
+  rework.
+- When a new fork appears mid-task, finish everything that does not depend on the answer, then
+  stop and ask. The pause should cost as little as possible.
+- Establish facts before offering options. "`.env.local` does not exist, so this check fails" is
+  worth more than "this might not work."
+- Never invent a name, path, type, or API shape the request did not describe. Leave it `unknown`
+  and say so.
+- Verify claims against the repository rather than recalling them. Read the installed package,
+  run the command, check the file.
+
+## Comment only what the code cannot say
+
+- **JSDoc on exported symbols stays.** It surfaces on hover at the call site, which the
+  implementation alone cannot do. Every export in `src/lib/`, `src/types/`, and `src/env.ts`
+  carries one — match that.
+- Every other comment must earn its place by explaining a **why** that is invisible in the code:
+  a workaround, an external constraint, a decision that looks wrong until explained. `src/env.ts`
+  explains why literal `process.env.NEXT_PUBLIC_*` access is required; `src/app/api/status/route.ts`
+  explains why the route must never be cached. Both are necessary; neither restates its code.
+- Delete comments that paraphrase the line below them, narrate the obvious, or label sections. A
+  comment written because the code is unclear is a bug report against the code — fix the code.
+- No commented-out code. Git remembers it.
+
+## Branch from origin/main
+
+```bash
+git fetch origin
+git checkout -b <branch> origin/main
+```
+
+Always `origin/main` — never the local `main`, which drifts, and never whichever branch happens
+to be checked out. **The single exception is an explicitly named base:** when the request says
+which branch to start from, use that one.
+
+Fetch first. Branching off a stale `origin/main` produces a diff full of other people's changes.
+
 # Project conventions
 
 Next.js 16 (App Router, Turbopack) · React 19 · TypeScript 5.9 strict · Tailwind CSS v4 ·
