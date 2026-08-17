@@ -41,7 +41,7 @@ git status --short
 Use `main...HEAD` (three dots) — it diffs against the merge base, so unrelated commits
 landed on `main` since you branched do not pollute the review.
 
-If the branch *is* `main`, or the diff is empty, say so and stop. Do not invent a target.
+If the branch _is_ `main`, or the diff is empty, say so and stop. Do not invent a target.
 
 ## Step 2 — Read before you judge
 
@@ -98,7 +98,7 @@ scenario — concrete inputs or state that produce a wrong result.
 - Secrets reaching the client: any non-`NEXT_PUBLIC_` value read outside `src/env.ts`, or a
   server-only value passed as a prop to a Client Component. Grep the change for `process.env`.
 - Route handlers and Server Actions without an authorization check — authentication is not
-  authorization; confirm the caller may act on *this* resource, not merely that they are logged in.
+  authorization; confirm the caller may act on _this_ resource, not merely that they are logged in.
 - Unvalidated input. This project has zod; parse at the boundary rather than trusting a cast.
 - `dangerouslySetInnerHTML` with anything not provably sanitized.
 - Redirects built from user input (open redirect); SQL or command strings built by concatenation.
