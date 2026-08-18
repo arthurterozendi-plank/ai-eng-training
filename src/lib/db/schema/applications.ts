@@ -74,5 +74,10 @@ export const applications = pgTable(
   ],
 ).enableRLS();
 
+/** An application row as read from the database. */
 export type Application = typeof applications.$inferSelect;
+/**
+ * The insert shape for a new application; only `jobId`, `candidateId`, and `stage` are
+ * required — every other column has a default or is nullable.
+ */
 export type NewApplication = typeof applications.$inferInsert;

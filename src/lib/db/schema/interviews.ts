@@ -45,5 +45,10 @@ export const interviews = pgTable(
   ],
 ).enableRLS();
 
+/** An interview row as read from the database. */
 export type Interview = typeof interviews.$inferSelect;
+/**
+ * The insert shape for a new interview; `applicationId`, `kind`, `scheduledAt`, and
+ * `interviewerName` are required — every other column has a default or is nullable.
+ */
 export type NewInterview = typeof interviews.$inferInsert;

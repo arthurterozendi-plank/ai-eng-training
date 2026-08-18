@@ -33,5 +33,10 @@ export const candidates = pgTable(
   ],
 ).enableRLS();
 
+/** A candidate row as read from the database. */
 export type Candidate = typeof candidates.$inferSelect;
+/**
+ * The insert shape for a new candidate; only `fullName` and `email` are required — every
+ * other column has a default or is nullable.
+ */
 export type NewCandidate = typeof candidates.$inferInsert;

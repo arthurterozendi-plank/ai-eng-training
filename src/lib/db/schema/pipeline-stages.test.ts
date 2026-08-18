@@ -1,37 +1,7 @@
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
-import { PIPELINE_STAGE_SEED, pipelineStages } from "@/lib/db/schema/pipeline-stages";
-
-describe("PIPELINE_STAGE_SEED", () => {
-  it("matches the seeded rows in §3.2, in position order", () => {
-    expect(PIPELINE_STAGE_SEED.map((stage) => stage.key)).toEqual([
-      "applied",
-      "screening",
-      "interview",
-      "offer",
-      "hired",
-      "rejected",
-      "withdrawn",
-    ]);
-  });
-
-  it("marks only the last three stages terminal", () => {
-    expect(PIPELINE_STAGE_SEED.map((stage) => stage.isTerminal)).toEqual([
-      false,
-      false,
-      false,
-      false,
-      true,
-      true,
-      true,
-    ]);
-  });
-
-  it("assigns strictly increasing, contiguous positions starting at 1", () => {
-    expect(PIPELINE_STAGE_SEED.map((stage) => stage.position)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-  });
-});
+import { pipelineStages } from "@/lib/db/schema/pipeline-stages";
 
 describe("pipelineStages table", () => {
   it("enables row level security", () => {

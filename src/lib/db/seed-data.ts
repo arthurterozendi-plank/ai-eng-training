@@ -145,9 +145,14 @@ function resumeUrlFor(fullName: string): string {
   return `https://resumes.talentscout.example/${slug(first)}-${slug(last)}.pdf`;
 }
 
+/**
+ * A profile URL under our own reserved namespace rather than `linkedin.com`. A
+ * `firstname-lastname-N` slug for sixty invented people can collide with a real member's vanity
+ * URL, which would attribute a stranger's profile to a fictional applicant.
+ */
 function linkedinUrlFor(fullName: string, index: number): string {
   const { first, last } = nameParts(fullName);
-  return `https://www.linkedin.com/in/${slug(first)}-${slug(last)}-${index}`;
+  return `https://profiles.talentscout.example/in/${slug(first)}-${slug(last)}-${index}`;
 }
 
 /**

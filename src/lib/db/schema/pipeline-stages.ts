@@ -39,5 +39,10 @@ export const pipelineStages = pgTable("pipeline_stages", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 
+/** A pipeline stage row as read from the database. */
 export type PipelineStage = typeof pipelineStages.$inferSelect;
+/**
+ * The insert shape for a new pipeline stage; `key`, `label`, and `position` are required —
+ * `isTerminal` and the timestamps have defaults.
+ */
 export type NewPipelineStage = typeof pipelineStages.$inferInsert;

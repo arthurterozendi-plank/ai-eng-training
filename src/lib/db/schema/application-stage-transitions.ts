@@ -54,5 +54,11 @@ export const applicationStageTransitions = pgTable(
   ],
 ).enableRLS();
 
+/** A stage transition row as read from the database. */
 export type ApplicationStageTransition = typeof applicationStageTransitions.$inferSelect;
+/**
+ * The insert shape for a new stage transition; only `applicationId` and `toStage` are
+ * required — `fromStage` is nullable (null on an application's first transition) and the
+ * rest have defaults.
+ */
 export type NewApplicationStageTransition = typeof applicationStageTransitions.$inferInsert;

@@ -436,6 +436,12 @@
         flex-direction: column;
         gap: 2px;
       }
+      /* #fragTitle is an h2 for the heading outline; strip the UA h2 margin/weight so
+         promoting it from a span does not change the rendered layout. */
+      #fragTitle {
+        margin: 0;
+        font-weight: 400;
+      }
       .feature-tag {
         font-size: 12px;
         color: var(--muted);
@@ -1309,7 +1315,7 @@
         <div class="frag-header">
           <button class="nbtn" id="zoomOutBtn">⤺ Zoom out</button>
           <div class="titles">
-            <span class="mono" id="fragTitle" tabindex="-1"></span>
+            <h2 class="mono" id="fragTitle" tabindex="-1"></h2>
             <span class="feature-tag" id="fragFeature"></span>
           </div>
           <span class="count" id="fragPos"></span>

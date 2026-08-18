@@ -60,5 +60,10 @@ export const notes = pgTable(
   ],
 ).enableRLS();
 
+/** A note row as read from the database. */
 export type Note = typeof notes.$inferSelect;
+/**
+ * The insert shape for a new note; only `body` and `author` are required — the three
+ * parent foreign keys are nullable (exactly one must be set) and the rest have defaults.
+ */
 export type NewNote = typeof notes.$inferInsert;

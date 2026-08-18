@@ -32,5 +32,10 @@ export const jobs = pgTable(
   ],
 ).enableRLS();
 
+/** A job row as read from the database. */
 export type Job = typeof jobs.$inferSelect;
+/**
+ * The insert shape for a new job; only `title`, `location`, and `description` are
+ * required — every other column has a default or is nullable.
+ */
 export type NewJob = typeof jobs.$inferInsert;

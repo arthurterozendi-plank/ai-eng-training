@@ -54,20 +54,26 @@ function parse<T extends z.ZodType>(schema: T, source: unknown, label: string): 
 
 const client = parse(clientSchema, clientRuntime, "client");
 
+// Each server key's single-key schema is built once, here, rather than inside its getter:
+// `.pick()` reconstructs a schema every call, which costs ~50x the validation it precedes, and
+// `NODE_ENV` is read per request by `src/app/api/status/route.ts`.
+const nodeEnvSchema = serverSchema.pick({ NODE_ENV: true });
+const databaseUrlSchema = serverSchema.pick({ DATABASE_URL: true });
+const directDatabaseUrlSchema = serverSchema.pick({ DIRECT_DATABASE_URL: true });
+
 // On the client, `process.env` only contains the inlined NEXT_PUBLIC_ values, so the server
-// schema is parsed lazily. Each server key gets its own getter — parsing only that key's slice
-// of `serverSchema` via `.pick()` — so reading one key never fails because a sibling key (e.g.
-// an unset DATABASE_URL) is invalid or missing.
+// schema is parsed lazily. Each server key gets its own getter, parsing only that key's slice
+// of `serverSchema`, so reading one key never fails because a sibling key (e.g. an unset
+// DATABASE_URL) is invalid or missing.
 export const env = {
   ...client,
   get NODE_ENV() {
-    return parse(serverSchema.pick({ NODE_ENV: true }), process.env, "server").NODE_ENV;
+    return parse(nodeEnvSchema, process.env, "server").NODE_ENV;
   },
   get DATABASE_URL() {
-    return parse(serverSchema.pick({ DATABASE_URL: true }), process.env, "server").DATABASE_URL;
+    return parse(databaseUrlSchema, process.env, "server").DATABASE_URL;
   },
   get DIRECT_DATABASE_URL() {
-    return parse(serverSchema.pick({ DIRECT_DATABASE_URL: true }), process.env, "server")
-      .DIRECT_DATABASE_URL;
+    return parse(directDatabaseUrlSchema, process.env, "server").DIRECT_DATABASE_URL;
   },
 };

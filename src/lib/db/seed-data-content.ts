@@ -1070,7 +1070,7 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
       },
       yearsExperience: { value: 6, confidence: 0.91, source: "resume.pdf#page=1" },
       portfolioUrl: {
-        value: "https://priyanandakumar.dev",
+        value: "https://portfolios.talentscout.example/priya-nandakumar",
         confidence: 0.88,
         source: "resume.pdf#page=1",
       },
@@ -1083,7 +1083,7 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
     extractedAfterHours: 12,
     fields: {
       portfolioUrl: {
-        value: "https://isabelduarte.design",
+        value: "https://portfolios.talentscout.example/isabel-duarte",
         confidence: 0.89,
         source: "resume.pdf#page=1",
       },

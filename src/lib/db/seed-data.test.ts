@@ -320,8 +320,10 @@ describe("buildSeedDataset — DoD 7: interview/stage coherence", () => {
       dataset.applications.map((application) => [application.id, application]),
     );
 
-    for (const interview of dataset.interviews) {
-      if (interview.kind !== "onsite") continue;
+    const onsiteInterviews = dataset.interviews.filter((interview) => interview.kind === "onsite");
+    expect(onsiteInterviews.length).toBeGreaterThan(0);
+
+    for (const interview of onsiteInterviews) {
       const application = applicationsById.get(interview.applicationId);
       expect(application?.stage).not.toBe("applied");
     }
@@ -333,14 +335,22 @@ describe("buildSeedDataset — DoD 7: interview/stage coherence", () => {
     );
 
     for (const interview of dataset.interviews) {
-      const application = applicationsById.get(interview.applicationId);
-      expect(application).toBeDefined();
-      if (!TERMINAL_STAGE_KEYS.some((stage) => stage === application!.stage)) continue;
+      expect(applicationsById.get(interview.applicationId)).toBeDefined();
+    }
+
+    const terminalStageInterviews = dataset.interviews.filter((interview) => {
+      const application = applicationsById.get(interview.applicationId)!;
+      return TERMINAL_STAGE_KEYS.some((stage) => stage === application.stage);
+    });
+    expect(terminalStageInterviews.length).toBeGreaterThan(0);
+
+    for (const interview of terminalStageInterviews) {
+      const application = applicationsById.get(interview.applicationId)!;
 
       // `stageChangedAt` is asserted elsewhere to equal the latest transition's `occurredAt` —
       // this is the terminal transition itself once `application.stage` is terminal.
       expect(interview.scheduledAt.getTime()).toBeLessThanOrEqual(
-        application!.stageChangedAt!.getTime(),
+        application.stageChangedAt!.getTime(),
       );
     }
   });
