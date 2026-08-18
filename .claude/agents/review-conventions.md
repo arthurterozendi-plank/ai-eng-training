@@ -22,7 +22,8 @@ You run in parallel with three other reviewers. **Stay in your lane**:
 | Waterfalls, re-renders, memoization, bundle size      | `review-performance` |
 | Injection, authn/authz, secrets, unsafe data handling | `review-security`    |
 
-Overlap rule: `process.env` outside `src/env.ts` is a convention breach _and_ a leak — leave it
+Overlap rule: `process.env` outside a workspace's own `src/env.ts` is a convention breach _and_ a
+leak — leave it
 to `review-security`, whose report says what it costs. `<img>` instead of `next/image` is
 `review-performance`'s. Missing `alt` is yours.
 
@@ -53,7 +54,20 @@ Use `main...HEAD` (three dots). If the branch _is_ `main`, or the diff is empty,
 
 ## Step 2 — Review
 
-### Layout and naming
+### Workspace layout
+
+This is a Turborepo monorepo: `apps/web` is the Next.js application, `packages/db` holds the
+Drizzle schema and migrations, and `packages/eslint-config` and `packages/typescript-config`
+hold the shared tooling. Paths below are relative to the workspace the changed file lives in.
+
+- A package must never import from an app — dependencies point one way. `packages/db` in
+  particular has to stay framework-free.
+- Across workspaces, import by package name (`@talentscout/db/schema/jobs`), never by a relative
+  path that climbs out of one workspace into another.
+- **A new package with only one consumer is a finding.** Code is extracted when a second caller
+  exists, not in anticipation of one.
+
+### Layout and naming inside `apps/web`
 
 - Files kebab-case; component exports PascalCase, function exports camelCase.
 - Our components live in `src/components/<kebab>/<kebab>.tsx`, each in its own directory with its
@@ -65,7 +79,8 @@ Use `main...HEAD` (three dots). If the branch _is_ `main`, or the diff is empty,
 
 ### Imports
 
-- `@/*` maps to `src/*`. A deep relative import crossing a directory (`../../lib/x`) is a defect.
+- `@/*` maps to the **current workspace's** `src/*`. A deep relative import crossing a directory
+  (`../../lib/x`) is a defect.
 - **No barrel files.** Import the module directly. A barrel that re-exports a `"use client"`
   module drags client code across the RSC boundary for every importer.
 - Import order is enforced by `@ianvs/prettier-plugin-sort-imports` — never hand-sort; the fix is
@@ -76,7 +91,8 @@ Use `main...HEAD` (three dots). If the branch _is_ `main`, or the diff is empty,
 - Server Components by default. `"use client"` only when the module itself needs state, effects,
   refs, or browser APIs.
 - Props typed inline via `React.ComponentProps<"tag">` intersections, extending the underlying
-  element rather than inventing a parallel prop set. `src/components/ui/button.tsx` is the model.
+  element rather than inventing a parallel prop set. `apps/web/src/components/ui/button.tsx` is
+  the model.
 - Classes composed with `cn()` from `@/lib/utils`. String concatenation breaks Tailwind class
   merging and the Prettier class sorter.
 - shadcn CSS variables (`bg-background`, `text-muted-foreground`) instead of hardcoded colours or
@@ -93,19 +109,25 @@ Use `main...HEAD` (three dots). If the branch _is_ `main`, or the diff is empty,
 
 `CLAUDE.md` is specific here, and this is the rule most changes break:
 
-- JSDoc on every export in `src/lib/`, `src/types/`, and `src/env.ts` — it surfaces on hover at
-  the call site. A new export there without one is a finding.
+- JSDoc on every export in `apps/web/src/lib/`, `apps/web/src/types/`, every `src/env.ts`, and
+  everything `packages/db` exports — it surfaces on hover at the call site. A new export there
+  without one is a finding. The bar is higher for a package: its exports are read from another
+  workspace, where the source is not in front of the reader.
 - Every other comment must explain a **why** invisible in the code. Comments that paraphrase the
   next line, narrate the obvious, or label a section should be deleted.
 - No commented-out code.
 
 ### Environment variables
 
-- Every key added to `serverSchema` or the client schema in `src/env.ts` must also appear in
-  `.env.example` — that file is the deploy contract `/pre-deploy` checks against. Verify:
+- Each workspace validates the keys it owns, in its own `src/env.ts`: `apps/web` owns `NODE_ENV`
+  and `NEXT_PUBLIC_APP_URL`, `packages/db` owns `DATABASE_URL` and `DIRECT_DATABASE_URL`. A
+  workspace re-reading another's variable instead of importing it (`@talentscout/db/env`) is a
+  finding.
+- Every key added to any of those schemas must also appear in the **root** `.env.example` — that
+  file is the deploy contract `/pre-deploy` checks against. Verify:
 
 ```bash
-git diff main...HEAD -- src/env.ts .env.example
+git diff main...HEAD -- '*/env.ts' .env.example
 ```
 
 ### Accessibility
@@ -123,8 +145,9 @@ git diff main...HEAD -- src/env.ts .env.example
 
 ### Tests
 
-- New behaviour with no test — especially route handlers, Server Actions, and `src/lib/` helpers.
-- Tests co-located as `*.test.ts(x)` beside the subject, under `src/`.
+- New behaviour with no test — especially route handlers, Server Actions, `src/lib/` helpers, and
+  anything `packages/db` exports.
+- Tests co-located as `*.test.ts(x)` beside the subject, under that workspace's `src/`.
 - Queries by accessible role or label. `getByTestId` only where nothing accessible identifies the
   element.
 - **A test that would still pass with the feature deleted is worse than no test.** Read each new
@@ -147,7 +170,7 @@ your report with the other three and applies fixes.
 Findings, most-severe first, one entry each:
 
 ```
-medium  src/components/data-card/data-card.tsx:14  [conventions]
+medium  apps/web/src/components/data-card/data-card.tsx:14  [conventions]
   Classes built by string concatenation instead of cn().
   Rule: CLAUDE.md, Components — "Never build a class string by concatenation."
   Fix: `cn("rounded border", isActive && "border-primary")`.
