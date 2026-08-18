@@ -11,8 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { ExtractionPayload } from "@/extraction";
-
+import type { ExtractionPayload } from "../extraction";
 import { candidates } from "./candidates";
 import { applicationSource } from "./enums";
 import { jobs } from "./jobs";
