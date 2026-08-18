@@ -3,8 +3,8 @@
 import { useLayoutEffect, useState, type ComponentProps } from "react";
 import { Moon, Sun } from "lucide-react";
 
+import { applyTheme, resolveInitialTheme, storeTheme } from "@/lib/theme";
 import { useMounted } from "@/hooks/use-mounted";
-import { applyTheme, resolveInitialTheme, storeTheme } from "@/components/theme-toggle/theme";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -33,7 +33,6 @@ function ThemeToggle(props: ComponentProps<typeof Button>) {
 
   return (
     <Button
-      data-slot="theme-toggle"
       variant="ghost"
       size="icon"
       // Withheld until hydration: the server cannot know the stored preference, so rendering it

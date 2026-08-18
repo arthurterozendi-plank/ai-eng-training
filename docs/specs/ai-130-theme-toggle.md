@@ -19,8 +19,8 @@ dark palette is dead CSS and the recruiter has no way to reach it.
 
 **In scope**
 
-- `apps/web/src/components/theme-toggle/` — the toggle and the theme module it shares with the
-  layout, each with a co-located test.
+- `apps/web/src/components/theme-toggle/` — the toggle and its test.
+- `apps/web/src/lib/theme.ts` — the theme module the toggle and the layout share, and its test.
 - The theme class applied to `<html>` in `apps/web/src/app/layout.tsx`.
 - The preference persisted client-side.
 - A README entry recording the decision (required by `CLAUDE.md`).
@@ -41,7 +41,7 @@ dark palette is dead CSS and the recruiter has no way to reach it.
 3. The toggle is reachable by keyboard and announces its state to a screen reader.
 4. Edge case: an unreadable stored preference falls back to the default theme instead of
    rendering unstyled.
-5. _(Deferred — see §8)_ After merging all four features, every new page is checked in dark theme.
+5. _(Deferred — see §9)_ After merging all four features, every new page is checked in dark theme.
 
 ### How each AC is verified
 
@@ -92,6 +92,16 @@ stored preference, falls back to `prefers-color-scheme`, and calls
 carries `font-sans` and the Geist font variable, and overwriting the class list would strip both
 and render the page unstyled.
 
+The script wraps the storage read in its own `try`, separate from the one around the rest. A
+browser that blocks storage throws on `getItem`, and a single outer `try` would abort before the
+`prefers-color-scheme` fallback ran — while `resolveInitialTheme` recovers from the same failure
+and does reach it. The two would then disagree, which is a light-to-dark flash on exactly the
+browsers that block storage.
+
+Both the script and `applyTheme` also set `color-scheme` on `<html>`, so the browser's own
+surfaces — scrollbars, form controls, and the canvas it paints before the stylesheet arrives —
+follow the theme rather than staying light under a dark page.
+
 **Hydration.** The script mutates `<html>`'s class list, which React would otherwise report as a
 mismatch, so `<html>` carries `suppressHydrationWarning`. That attribute applies to the element
 it is on, not to descendants, so it hides exactly the one mutation we make and nothing else.
@@ -120,16 +130,18 @@ remount strips off `<html>`.
 
 ## 5. Assumptions log (🟡)
 
-| #   | Decision                                                                             | Why                                                                                                                                                                                    |
-| --- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Two extra files in the component directory (`theme.ts`, `theme.test.ts`)             | The ticket names two files, but the layout and the toggle must agree on one storage key. Duplicating the key in both is a latent bug; a shared module is the smaller risk.             |
-| 2   | Storage key `talentscout-theme`, not `theme`                                         | `localhost:3000` is shared by every project on this machine; a namespaced key cannot be poisoned by another app's value.                                                               |
-| 3   | Storage is `localStorage`, not a cookie                                              | A cookie read in the root layout opts the whole app out of static prerendering (Next 16 guide, "Storing the theme in a cookie"). Nothing server-side needs the theme.                  |
-| 4   | Default when nothing is stored is the OS `prefers-color-scheme`, then light          | The ticket puts "system-preference following _beyond the initial default_" out of scope, which implies the initial default is the system preference.                                   |
-| 5   | The toggle is mounted in `layout.tsx`, fixed top-right                               | AC 1 needs a reachable toggle; AI-129 owns the settings page and the other agents own their pages. The app shell is the only surface left, and it is the one file this ticket owns.    |
-| 6   | Icon state is CSS (`dark:` variant), not React state                                 | Removes the last thing that could flash on first paint and keeps the component's only stateful output the one `aria-pressed` attribute.                                                |
-| 7   | `aria-pressed` on a button named "Dark theme", not a three-way radiogroup or a menu  | Two themes, one control. A pressed-state toggle is the smallest thing a screen reader announces correctly, and it needs no new shadcn primitive (which would touch `components.json`). |
-| 8   | `window.matchMedia` is stubbed in tests rather than guarded in `resolveInitialTheme` | jsdom does not implement it; every browser since 2015 does. Guarding production code for a test-environment gap would be testing the guard, not the behaviour.                         |
+| #   | Decision                                                                             | Why                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | A shared module beyond the ticket's two-file list (`src/lib/theme.ts` and its test)  | The ticket names two files, but the layout and the toggle must agree on one storage key. Duplicating the key in both is a latent bug; a shared module is the smaller risk. Review round 1 moved it out of the component directory into `src/lib/` — see §8. |
+| 2   | Storage key `talentscout-theme`, not `theme`                                         | `localhost:3000` is shared by every project on this machine; a namespaced key cannot be poisoned by another app's value.                                                                                                                                    |
+| 3   | Storage is `localStorage`, not a cookie                                              | A cookie read in the root layout opts the whole app out of static prerendering (Next 16 guide, "Storing the theme in a cookie"). Nothing server-side needs the theme.                                                                                       |
+| 4   | Default when nothing is stored is the OS `prefers-color-scheme`, then light          | The ticket puts "system-preference following _beyond the initial default_" out of scope, which implies the initial default is the system preference.                                                                                                        |
+| 5   | The toggle is mounted in `layout.tsx`, fixed top-right                               | AC 1 needs a reachable toggle; AI-129 owns the settings page and the other agents own their pages. The app shell is the only surface left, and it is the one file this ticket owns.                                                                         |
+| 6   | Icon state is CSS (`dark:` variant), not React state                                 | Removes the last thing that could flash on first paint and keeps the component's only stateful output the one `aria-pressed` attribute.                                                                                                                     |
+| 7   | `aria-pressed` on a button named "Dark theme", not a three-way radiogroup or a menu  | Two themes, one control. A pressed-state toggle is the smallest thing a screen reader announces correctly, and it needs no new shadcn primitive (which would touch `components.json`).                                                                      |
+| 8   | `window.matchMedia` is stubbed in tests rather than guarded in `resolveInitialTheme` | jsdom does not implement it; every browser since 2015 does. Guarding production code for a test-environment gap would be testing the guard, not the behaviour.                                                                                              |
+| 9   | `color-scheme` is set on `<html>` alongside the class                                | Adopted from review round 1. Without it the browser's own surfaces — scrollbars, form controls, and the canvas painted before the stylesheet arrives — stay light in dark theme.                                                                            |
+| 10  | The init script uses two `try` blocks, not one                                       | Adopted from review round 1. See §8 — a single outer `try` made the script and `resolveInitialTheme` disagree on browsers that block storage, which is a flash.                                                                                             |
 
 ## 6. Recorded, not fixed
 
@@ -156,7 +168,29 @@ through Chrome DevTools against `next dev` on port 3130 (host OS set to prefer d
 | Hard reload with `light` stored while the OS prefers dark | Stayed light — the stored preference wins over the system default                                                                                                |
 | Hard reload with `{"corrupted":true}` stored              | Fell back to the system preference; `font-sans` and the Geist variable class both survived, `font-family: Geist`, background `lab(2.75 0 0)` — styled, not naked |
 
-## 8. Deferred
+## 8. Review
+
+**Cross-tool review was unavailable** — `codex` is not on this machine's PATH, so
+`~/.claude/scripts/run-review.sh` would fail closed. Review fell back to independent subagents;
+**it was therefore same-model**, and that is recorded here rather than glossed over.
+
+Three lanes ran against the committed diff: a general adversarial reviewer, the repository's
+`review-security` lane, and its `review-conventions` lane. No lane raised a BLOCKING finding.
+
+Dispositions of the findings acted on:
+
+| Finding                                                                                                                                                                                                                       | Disposition                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The init script's single outer `try` aborted before the `matchMedia` fallback when `localStorage.getItem` throws, while `resolveInitialTheme` recovered and reached it — a light-to-dark flash on browsers that block storage | **Adopted.** The storage read now has its own `try`. Tagged NIT, fixed anyway: it is a genuine AC 2 failure and the fix is one line. A table-driven test covers all eight input combinations and was confirmed to fail against the old script before the fix landed.                                                              |
+| Six tests would have passed with the feature deleted                                                                                                                                                                          | **Adopted.** Replaced by the eight-case table, which asserts the concrete expected theme rather than an absence, plus a case that seeds `dark` on `<html>` so the script has to remove it.                                                                                                                                        |
+| `data-slot="theme-toggle"` was spread after `Button`'s own `data-slot="button"` and silently overwrote it                                                                                                                     | **Adopted.** Dropped; `Button` keeps its own contract. Tests query by role, not by attribute.                                                                                                                                                                                                                                     |
+| Nothing set `color-scheme`, so native scrollbars and form controls stayed light in dark theme                                                                                                                                 | **Adopted**, but from `theme.ts` rather than `globals.css` — that file is outside this ticket's edit set and a sibling agent may be in it.                                                                                                                                                                                        |
+| An inline `dangerouslySetInnerHTML` script will need a nonce or hash if a CSP is ever added (there is none today)                                                                                                             | **Adopted** as a comment on `THEME_INIT_SCRIPT`, so whoever adds a CSP finds it. No code change — there is no policy to violate yet.                                                                                                                                                                                              |
+| README overstated that "the root layout toggles the class"                                                                                                                                                                    | **Adopted.** Reworded — the layout renders the script; the script and the toggle do the toggling.                                                                                                                                                                                                                                 |
+| The toggle is the first focusable element in `<body>` and sits outside any landmark                                                                                                                                           | **Declined here, recorded.** The fix is a `<header>` wrapper, which belongs with a real app shell; this ticket's layout edit is deliberately minimal. Carried to AI-42.                                                                                                                                                           |
+| `theme.ts` was framework-free code under `src/components/` rather than `src/lib/` (raised independently by two lanes)                                                                                                         | **Adopted.** Moved to `apps/web/src/lib/theme.ts`. `CLAUDE.md`'s layout table routes framework-free code to `src/lib/`, and the "code with one caller belongs inside that caller" rule does not apply — it has two callers, in two directories. The move also makes the component directory match the ticket's file list exactly. |
+
+## 9. Deferred
 
 AC 5 — "after merging all four features, every new page is checked in dark theme" — **cannot be
 met from this worktree**, because AI-127, AI-128 and AI-129 are unmerged and their pages are not

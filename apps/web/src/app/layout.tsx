@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { THEME_INIT_SCRIPT } from "@/components/theme-toggle/theme";
 import { ThemeToggle } from "@/components/theme-toggle/theme-toggle";
 
 import "./globals.css";

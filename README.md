@@ -175,11 +175,12 @@ icons, CSS variables), and the generated files land in `apps/web/src/components/
 
 Light and dark are both first-class. `globals.css` carries the full shadcn variable set under
 `:root` and a second set under `.dark`, and `@custom-variant dark (&:is(.dark *))` makes every
-`dark:` utility key off that class. The root layout toggles the class on `<html>`, and the
-recruiter's choice is persisted client-side in `localStorage` under `talentscout-theme`.
+`dark:` utility key off that class. An inline script the root layout renders puts that class on
+`<html>`, and the toggle maintains it thereafter; the recruiter's choice is persisted
+client-side in `localStorage` under `talentscout-theme`.
 
 The class is applied by an inline `<script>` in `<head>`, rendered from `THEME_INIT_SCRIPT` in
-`apps/web/src/components/theme-toggle/theme.ts`. The browser runs it synchronously while parsing
+`apps/web/src/lib/theme.ts`. The browser runs it synchronously while parsing
 the document, so the first paint is already in the right theme instead of flashing light and
 correcting after hydration — which is also why `<html>` carries `suppressHydrationWarning`. A
 cookie would let the server render the theme instead, but reading one in the root layout opts the

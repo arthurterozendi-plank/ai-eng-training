@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DARK_CLASS, THEME_STORAGE_KEY } from "@/components/theme-toggle/theme";
+import { DARK_CLASS, THEME_STORAGE_KEY } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle/theme-toggle";
 
 /** The classes the root layout puts on `<html>` before any theme is applied. */

@@ -21,17 +21,25 @@ const PREFERS_DARK_QUERY = "(prefers-color-scheme: dark)";
  * paint rather than after hydration.
  *
  * It toggles a single class instead of assigning `className`, because `<html>` also carries the
- * font classes — overwriting the class list would render the page unstyled. A stored value that
- * is not a known theme, or a `localStorage` that throws, both fall through to the system
- * preference and then to the default.
+ * font classes — overwriting the class list would render the page unstyled.
+ *
+ * The storage read has its own `try`, separate from the one around the rest: a browser that
+ * blocks storage throws on `getItem`, and a single outer `try` would abort before the
+ * `prefers-color-scheme` fallback ran. `resolveInitialTheme` recovers from the same failure and
+ * does reach that fallback, so a shared `try` would leave the two disagreeing — which is a
+ * light-to-dark flash on exactly the browsers that block storage.
+ *
+ * The app sets no Content-Security-Policy today. Whoever adds one must give this script a
+ * nonce or hash — an inline script rendered through `dangerouslySetInnerHTML` gets neither
+ * automatically, and it would start failing silently rather than loudly.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(
+export const THEME_INIT_SCRIPT = `(function(){var t=null;try{t=localStorage.getItem(${JSON.stringify(
   THEME_STORAGE_KEY,
-)});if(t!=="light"&&t!=="dark"){t=window.matchMedia(${JSON.stringify(
+)})}catch(e){}try{if(t!=="light"&&t!=="dark"){t=window.matchMedia(${JSON.stringify(
   PREFERS_DARK_QUERY,
-)}).matches?"dark":"light"}document.documentElement.classList.toggle(${JSON.stringify(
+)}).matches?"dark":"light"}var r=document.documentElement;r.classList.toggle(${JSON.stringify(
   DARK_CLASS,
-)},t==="dark")}catch(e){}})();`;
+)},t==="dark");r.style.colorScheme=t}catch(e){}})();`;
 
 /**
  * The stored theme, or `null` when nothing valid is stored or storage cannot be read — Safari's
@@ -56,9 +64,16 @@ export function storeTheme(theme: Theme): void {
   }
 }
 
-/** Applies a theme to `<html>`, matching what {@link THEME_INIT_SCRIPT} does before first paint. */
+/**
+ * Applies a theme to `<html>`, matching what {@link THEME_INIT_SCRIPT} does before first paint.
+ *
+ * `color-scheme` is set alongside the class so the browser's own surfaces — scrollbars, form
+ * controls, and the canvas it paints before the stylesheet arrives — follow the theme too.
+ */
 export function applyTheme(theme: Theme): void {
-  document.documentElement.classList.toggle(DARK_CLASS, theme === "dark");
+  const root = document.documentElement;
+  root.classList.toggle(DARK_CLASS, theme === "dark");
+  root.style.colorScheme = theme;
 }
 
 /**
