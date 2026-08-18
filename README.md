@@ -135,8 +135,9 @@ is framework-specific.
 
 Two connection strings, both validated in `packages/db/src/env.ts`:
 
-- `DATABASE_URL` — the pooled connection (Supavisor, transaction mode). Nothing in this
-  repo reads it yet; it is reserved for the runtime client a later change adds.
+- `DATABASE_URL` — the pooled connection (Supavisor, transaction mode). `packages/db/src/client.ts`
+  reads it to build `db`, the runtime client every request-path query goes through. Its pool is
+  cached on `globalThis` so Next's hot reload cannot leak a connection per edit.
 - `DIRECT_DATABASE_URL` — the direct connection. **Both `pnpm db:migrate` and `pnpm db:seed`
   use this one**, never the pooled URL: DDL and the migrator's advisory locks do not survive
   Supabase's transaction pooler.
