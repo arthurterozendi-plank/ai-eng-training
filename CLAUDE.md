@@ -35,6 +35,23 @@ and mentioning it afterwards is still an assumption; it just moves the surprise 
 - Verify claims against the repository rather than recalling them. Read the installed package,
   run the command, check the file.
 
+## Record project decisions in the README
+
+`README.md` is where a decision about **this project** lives. When a change settles something the
+repository did not previously state, update the README **in the same PR as the change itself** —
+never as a follow-up. A README that lags behind the code is worse than one that stays silent,
+because it is believed.
+
+- **Decisions, not routine work.** Implementing a feature the README already describes settles
+  nothing. Adding Postgres, choosing Inngest over a cron job, renaming a core entity, dropping a
+  planned capability, or changing who the product is for all do.
+- **Record the reason, not the event.** "Postgres with pgvector — the document corpus and the
+  memory store both need vector search" survives re-reading. "Added a database" does not.
+- **Edit, do not append.** When a decision is reversed, rewrite the entry so the README describes
+  the project as it is now. The history lives in git.
+- If a change settles nothing, leave the README alone. Padding it costs the same trust as letting
+  it go stale.
+
 ## Comment only what the code cannot say
 
 - **JSDoc on exported symbols stays.** It surfaces on hover at the call site, which the
