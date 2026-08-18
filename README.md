@@ -1,6 +1,29 @@
 # ai-eng-training
 
-AI Engineering Training — Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui.
+Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui.
+
+## The project
+
+This repository is coursework for a 20-day AI Engineering training programme, and the product
+built across all of it is **TalentScout** — an AI recruiting copilot.
+
+One product carries every exercise, so the work compounds instead of producing twenty
+disconnected demos. The domain is **jobs**, **candidates**, **applications**, **interviews** and
+**notes**, and it was chosen because the hardest days of the programme fall out of it naturally:
+
+| Day | Needs                                   | TalentScout supplies                                       |
+| --- | --------------------------------------- | ---------------------------------------------------------- |
+| 5   | A real database and an analytics funnel | Jobs/candidates/applications schema, the apply funnel      |
+| 9   | Data worth visualising                  | Hiring funnel, time-to-hire, source quality                |
+| 13  | A 50+ document corpus                   | Resumes, job descriptions, interview guides, policies      |
+| 14  | Scraping and browser goals              | Job boards and company careers pages                       |
+| 16  | Voice **and** video                     | AI phone screen; recorded video-interview analysis         |
+| 17  | Job posting / invoice / email schemas   | Postings, agency fee invoices, candidate email threads     |
+| 18  | A long pipeline with human approval     | Application intake → extract → recruiter review → store    |
+| 20  | A startup brief to design against       | Brief C (sales intelligence) maps almost 1:1 onto the code |
+
+Work is tracked in Linear under the project **TalentScout — AI Eng Training**: one milestone per
+week, one parent issue per day, and sub-issues sized so each is a single PR.
 
 ## Getting started
 

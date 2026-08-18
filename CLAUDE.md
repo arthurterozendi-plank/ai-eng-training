@@ -1,5 +1,18 @@
 @AGENTS.md
 
+# The product
+
+This repository is coursework for a 20-day AI Engineering training programme. The product built
+across every exercise is **TalentScout**, an AI recruiting copilot: **jobs**, **candidates**,
+**applications**, **interviews**, **notes**.
+
+Assume that domain when a request does not name one. A feature ticket without a stated user is a
+recruiter's; the corpus is hiring documents; the voice surface is a candidate phone screen.
+
+Read the "The project" section of `README.md` for why this domain was chosen and which day of the
+programme each capability belongs to. Work is tracked in Linear under **TalentScout — AI Eng
+Training**, one parent issue per day, sub-issues sized as one PR each.
+
 # Working agreement
 
 How work gets done here. These rules apply before any of the code conventions below, and they
