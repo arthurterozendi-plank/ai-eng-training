@@ -55,12 +55,15 @@ because it is believed.
 ## Comment only what the code cannot say
 
 - **JSDoc on exported symbols stays.** It surfaces on hover at the call site, which the
-  implementation alone cannot do. Every export in `src/lib/`, `src/types/`, and `src/env.ts`
-  carries one — match that.
+  implementation alone cannot do. Every export in `apps/web/src/lib/`, `apps/web/src/types/`,
+  every `src/env.ts`, and everything `packages/db` exports carries one — match that. A package's
+  exports are read from another workspace, where the source is not in front of the reader, so
+  the bar there is higher rather than lower.
 - Every other comment must earn its place by explaining a **why** that is invisible in the code:
-  a workaround, an external constraint, a decision that looks wrong until explained. `src/env.ts`
-  explains why literal `process.env.NEXT_PUBLIC_*` access is required; `src/app/api/status/route.ts`
-  explains why the route must never be cached. Both are necessary; neither restates its code.
+  a workaround, an external constraint, a decision that looks wrong until explained.
+  `apps/web/src/env.ts` explains why literal `process.env.NEXT_PUBLIC_*` access is required;
+  `apps/web/src/app/api/status/route.ts` explains why the route must never be cached. Both are
+  necessary; neither restates its code.
 - Delete comments that paraphrase the line below them, narrate the obvious, or label sections. A
   comment written because the code is unclear is a bug report against the code — fix the code.
 - No commented-out code. Git remembers it.
@@ -80,21 +83,38 @@ Fetch first. Branching off a stale `origin/main` produces a diff full of other p
 
 # Project conventions
 
-Next.js 16 (App Router, Turbopack) · React 19 · TypeScript 5.9 strict · Tailwind CSS v4 ·
-shadcn/ui · Vitest + Testing Library · zod 4 · pnpm.
+Turborepo (pnpm workspaces) · Next.js 16 (App Router, Turbopack) · React 19 ·
+TypeScript 5.9 strict · Tailwind CSS v4 · shadcn/ui · Vitest + Testing Library · Drizzle ORM ·
+zod 4 · pnpm.
 
-## Layout and naming
+## Workspace layout
 
-| What                | Where                                              |
-| ------------------- | -------------------------------------------------- |
-| Routes and layouts  | `src/app/`                                         |
-| API route handlers  | `src/app/api/<segment>/route.ts`                   |
-| Our components      | `src/components/<kebab>/<kebab>.tsx`               |
-| shadcn primitives   | `src/components/ui/<kebab>.tsx`                    |
-| Framework-free code | `src/lib/`                                         |
-| Hooks               | `src/hooks/use-<kebab>.ts`                         |
-| App-wide types      | `src/types/index.ts`                               |
-| Env access          | `src/env.ts` (the only file reading `process.env`) |
+| Workspace                    | What it is                                            |
+| ---------------------------- | ----------------------------------------------------- |
+| `apps/web`                   | `@talentscout/web` — the Next.js application          |
+| `packages/db`                | `@talentscout/db` — Drizzle schema, migrations, seed  |
+| `packages/eslint-config`     | `@talentscout/eslint-config` — `base` and `next`      |
+| `packages/typescript-config` | `@talentscout/typescript-config` — the tsconfig bases |
+
+A new workspace goes under `apps/` if it is deployable and `packages/` if it is imported.
+Name it `@talentscout/<kebab>` and give it `package.json`, `tsconfig.json` extending a shared
+base, and `eslint.config.mjs` re-exporting a shared config — copy `packages/db` as the model.
+
+**Extract a package when a second consumer exists, not before.** Code with one caller belongs
+inside that caller.
+
+## Layout and naming inside `apps/web`
+
+| What                | Where                                                         |
+| ------------------- | ------------------------------------------------------------- |
+| Routes and layouts  | `src/app/`                                                    |
+| API route handlers  | `src/app/api/<segment>/route.ts`                              |
+| Our components      | `src/components/<kebab>/<kebab>.tsx`                          |
+| shadcn primitives   | `src/components/ui/<kebab>.tsx`                               |
+| Framework-free code | `src/lib/`                                                    |
+| Hooks               | `src/hooks/use-<kebab>.ts`                                    |
+| App-wide types      | `src/types/index.ts`                                          |
+| Env access          | `src/env.ts` (the only file in the app reading `process.env`) |
 
 - **Files are kebab-case, exports are PascalCase** for components (`data-card/data-card.tsx`
   exports `DataCard`) and camelCase for functions (`format.ts` exports `formatCurrency`).
@@ -106,8 +126,14 @@ shadcn/ui · Vitest + Testing Library · zod 4 · pnpm.
 
 ## Imports
 
-- `@/*` maps to `src/*`. Always import through the alias — a deep relative import
-  (`../../lib/x`) that crosses a directory is a defect.
+- `@/*` maps to the **current workspace's** `src/*`. Always import through the alias — a deep
+  relative import (`../../lib/x`) that crosses a directory is a defect.
+- **Across workspaces, import by package name**: `@talentscout/db/schema/jobs`, never a relative
+  path out of one workspace and into another. Add the dependency to that workspace's
+  `package.json` as `workspace:*` first; Turbopack transpiles workspace packages automatically,
+  so no `transpilePackages` entry is needed.
+- **Dependencies point one way: apps depend on packages.** A package must never import from an
+  app, and `packages/db` in particular must stay framework-free.
 - **No barrel files.** Import the module directly (`@/components/ui/button`), never through a
   re-exporting `index.ts`. Barrels defeat tree-shaking and, worse, let a `"use client"` module
   drag unrelated server code across the RSC boundary. `src/types/index.ts` is a real module that
@@ -120,8 +146,8 @@ shadcn/ui · Vitest + Testing Library · zod 4 · pnpm.
 - **Server Components by default.** Add `"use client"` only when the module itself needs state,
   effects, refs, or browser APIs — and push the boundary down to the smallest leaf that needs it.
 - Props are typed inline via `React.ComponentProps<"tag">` intersections, as in
-  `src/components/ui/button.tsx`. Prefer extending the underlying element's props over inventing
-  a parallel prop set.
+  `apps/web/src/components/ui/button.tsx`. Prefer extending the underlying element's props over
+  inventing a parallel prop set.
 - Compose classes with `cn()` from `@/lib/utils`. Never build a class string by concatenation —
   it breaks both Tailwind class merging and the Prettier class sorter.
 - Use the shadcn CSS variables (`bg-background`, `text-muted-foreground`) instead of hardcoded
@@ -130,8 +156,8 @@ shadcn/ui · Vitest + Testing Library · zod 4 · pnpm.
 
 ## API routes
 
-- One directory per endpoint under `src/app/api/`, containing `route.ts`, `schema.ts`, and
-  `route.test.ts`.
+- One directory per endpoint under `apps/web/src/app/api/`, containing `route.ts`, `schema.ts`,
+  and `route.test.ts`.
 - **Validate every input with zod at the boundary.** A route handler is a public HTTP endpoint;
   parse the body and the search params rather than casting them.
 - Zod schemas and the types inferred from them live in `schema.ts`; `route.ts` holds handler
@@ -145,22 +171,35 @@ shadcn/ui · Vitest + Testing Library · zod 4 · pnpm.
 
 ## Tests
 
-- Co-located as `*.test.ts` / `*.test.tsx` beside the subject, under `src/`.
-- Vitest + Testing Library, jsdom environment. Query by accessible role or label
-  (`getByRole`) — reach for `getByTestId` only when nothing accessible identifies the element.
+- Co-located as `*.test.ts` / `*.test.tsx` beside the subject, under the workspace's `src/`.
+- Every workspace configures its own Vitest: `apps/web` runs jsdom with Testing Library,
+  `packages/db` runs the node environment with no DOM at all.
+- Query by accessible role or label (`getByRole`) — reach for `getByTestId` only when nothing
+  accessible identifies the element.
 - Assert behaviour, not implementation. A test that would still pass with the feature deleted is
   worse than no test.
 
 ## Environment variables
 
-- `src/env.ts` is the only module that may read `process.env`. Everything else imports `env`
-  from `@/env`.
+- **Each workspace validates the keys it owns**, in its own `src/env.ts` — the only module in
+  that workspace that may read `process.env`. `apps/web` owns `NODE_ENV` and
+  `NEXT_PUBLIC_APP_URL`; `packages/db` owns `DATABASE_URL` and `DIRECT_DATABASE_URL`. A
+  workspace that needs another's value imports it (`@talentscout/db/env`) rather than re-reading
+  the variable.
 - Server-only values go in `serverSchema`; anything the browser needs must be prefixed
   `NEXT_PUBLIC_` and referenced literally so Next can inline it at build time.
-- Every key added to a schema must also be added to `.env.example`, which is the deploy-time
-  contract `/pre-deploy` checks against.
+- **One `.env.local` at the repository root serves everything.** Next.js only reads `.env` files
+  from its own project directory and never from a parent, so every script that needs them is
+  launched through `dotenv -e ../../.env.local --`.
+- Every key added to a schema must also be added to the root `.env.example`, which is the
+  deploy-time contract `/pre-deploy` checks against.
 
 ## Verification
 
-`pnpm check` — typecheck, lint, format check, and tests. Run it before handing work back;
-never leave the tree red.
+`pnpm check` from the repository root — `turbo run typecheck lint test` across every workspace,
+then Prettier's format check over the whole tree. Run it before handing work back; never leave
+the tree red.
+
+Turbo caches task results, so a second run is nearly free. To work in one workspace only, use
+`pnpm --filter @talentscout/web <script>`. Formatting is deliberately a single root pass, not a
+per-workspace task: Prettier's import-sort and Tailwind-class plugins need one shared config.

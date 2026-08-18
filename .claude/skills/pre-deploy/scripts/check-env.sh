@@ -2,9 +2,13 @@
 #
 # Every key declared in .env.example must resolve to a non-empty value.
 #
-# .env.example is the committed deploy-time contract; src/env.ts is the runtime validator.
-# A key present in one and missing from the other is a deploy waiting to fail, so this also
-# reports keys that src/env.ts validates but .env.example never declares.
+# .env.example is the committed deploy-time contract; each workspace's src/env.ts is a runtime
+# validator. A key present in one and missing from the other is a deploy waiting to fail, so
+# this also reports keys any env.ts validates but .env.example never declares.
+#
+# Both files live at the repository root: one .env.example and one .env.local serve every
+# workspace, because Next.js only reads .env files from its own project directory and the
+# scripts are launched through `dotenv -e ../../.env.local`.
 #
 # Resolution order matches Next.js: process environment, then .env.production.local,
 # .env.local, .env. Files are PARSED, never sourced — sourcing would execute whatever a
@@ -60,9 +64,17 @@ else
   fi
 fi
 
-# Drift check: keys src/env.ts validates that .env.example never mentions.
-if [ -f src/env.ts ]; then
-  validated=$(sed -nE 's/^[[:space:]]*(NEXT_PUBLIC_[A-Z0-9_]+|[A-Z][A-Z0-9_]+):[[:space:]]*z\..*/\1/p' src/env.ts | sort -u)
+# Drift check: keys any workspace's env.ts validates that .env.example never mentions.
+env_modules=()
+for module in apps/*/src/env.ts packages/*/src/env.ts; do
+  [ -f "$module" ] && env_modules+=("$module")
+done
+
+if [ ${#env_modules[@]} -gt 0 ]; then
+  validated=$(
+    sed -nE 's/^[[:space:]]*(NEXT_PUBLIC_[A-Z0-9_]+|[A-Z][A-Z0-9_]+):[[:space:]]*z\..*/\1/p' \
+      "${env_modules[@]}" | sort -u
+  )
   undeclared=""
   for key in $validated; do
     # NODE_ENV is supplied by the runtime, never by the deployer.
@@ -70,7 +82,7 @@ if [ -f src/env.ts ]; then
     printf '%s\n' "$declared" | grep -qx "$key" || undeclared="$undeclared $key"
   done
   if [ -n "$undeclared" ]; then
-    echo "WARN: validated by src/env.ts but absent from .env.example:$undeclared"
+    echo "WARN: validated by ${env_modules[*]} but absent from .env.example:$undeclared"
   fi
 fi
 

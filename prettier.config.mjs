@@ -25,7 +25,7 @@ const config = {
   importOrderParserPlugins: ["typescript", "jsx", "decorators-with-export"],
   importOrderTypeScriptVersion: "5.9.3",
 
-  tailwindStylesheet: "./src/app/globals.css",
+  tailwindStylesheet: "./apps/web/src/app/globals.css",
   tailwindFunctions: ["cn", "cva"],
 };
 

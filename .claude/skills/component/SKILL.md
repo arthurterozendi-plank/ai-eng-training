@@ -18,7 +18,7 @@ do not wire it into a page, do not invent props the caller did not ask for.
 - `<Name>` — PascalCase (`DataCard`) or kebab-case (`data-card`). Both are accepted.
 - `--client` — emit a Client Component (`"use client"`). **Omit unless the component needs
   state, effects, refs, or browser APIs.** Server Component is the default.
-- `--ui` — place it in `src/components/ui/` as a shadcn-style primitive instead of its own
+- `--ui` — place it in `apps/web/src/components/ui/` as a shadcn-style primitive instead of its own
   directory. Only for genuinely generic primitives.
 
 If `<Name>` is missing, ask for it. Do not guess a name.
@@ -29,7 +29,7 @@ Read `CLAUDE.md` before writing anything. It is the source of truth for paths, n
 rules, and the no-barrel rule. If it disagrees with anything below, **CLAUDE.md wins** — and say
 so in your report.
 
-Then read `src/components/ui/button.tsx` and `src/components/ui/button.test.tsx` as the worked
+Then read `apps/web/src/components/ui/button.tsx` and `apps/web/src/components/ui/button.test.tsx` as the worked
 example of the house style: `data-slot` attribute, `cn()` composition, props via
 `React.ComponentProps<"tag">`, named export at the bottom of the file.
 
@@ -42,10 +42,10 @@ From `<Name>` derive:
 
 Paths:
 
-| Flag      | Component                            | Test                                      |
-| --------- | ------------------------------------ | ----------------------------------------- |
-| (default) | `src/components/<kebab>/<kebab>.tsx` | `src/components/<kebab>/<kebab>.test.tsx` |
-| `--ui`    | `src/components/ui/<kebab>.tsx`      | `src/components/ui/<kebab>.test.tsx`      |
+| Flag      | Component                                     | Test                                               |
+| --------- | --------------------------------------------- | -------------------------------------------------- |
+| (default) | `apps/web/src/components/<kebab>/<kebab>.tsx` | `apps/web/src/components/<kebab>/<kebab>.test.tsx` |
+| `--ui`    | `apps/web/src/components/ui/<kebab>.tsx`      | `apps/web/src/components/ui/<kebab>.test.tsx`      |
 
 **Check both paths first.** If either exists, stop and report it — never overwrite a component
 someone already wrote.
@@ -120,12 +120,12 @@ import { DataCard } from "@/components/data-card/data-card";
 ```
 
 Do not create `index.ts`, do not add a re-export to one, and do not "helpfully" suggest it.
-`src/types/index.ts` is a real module, not a barrel — leave it alone.
+`apps/web/src/types/index.ts` is a real module, not a barrel — leave it alone.
 
 ## Step 6 — Verify
 
 ```bash
-pnpm typecheck && pnpm vitest run src/components/<kebab>
+pnpm typecheck && pnpm --filter @talentscout/web exec vitest run src/components/<kebab>
 ```
 
 Then format, because the import sorter and Tailwind class sorter both rewrite what you wrote:

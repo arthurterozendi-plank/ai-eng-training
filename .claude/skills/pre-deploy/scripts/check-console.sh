@@ -6,7 +6,8 @@
 # Component or route handler has for reporting a real failure. console.log is almost always a
 # leftover, and on the server it goes straight into production logs.
 #
-# Test files are excluded — a console call there never ships.
+# Test files are excluded — a console call there never ships. So is every workspace's
+# scripts/ directory: those are operator tools that are supposed to print progress.
 #
 # Usage: bash check-console.sh [repo-root]
 
@@ -14,19 +15,25 @@ set -uo pipefail
 
 cd "${1:-.}" || exit 1
 
-if [ ! -d src ]; then
-  echo "FAIL: no src/ directory at $(pwd)"
+# Every workspace's src/ — the shipped source of each app and package.
+sources=()
+for dir in apps/*/src packages/*/src; do
+  [ -d "$dir" ] && sources+=("$dir")
+done
+
+if [ ${#sources[@]} -eq 0 ]; then
+  echo "FAIL: no apps/*/src or packages/*/src directory at $(pwd)"
   exit 1
 fi
 
 hits=$(
-  grep -rnE '(^|[^.[:alnum:]_$])console\.(log|debug)[[:space:]]*\(' src \
+  grep -rnE '(^|[^.[:alnum:]_$])console\.(log|debug)[[:space:]]*\(' "${sources[@]}" \
     --include='*.ts' --include='*.tsx' |
     grep -vE '\.(test|spec)\.tsx?:' || true
 )
 
 if [ -z "$hits" ]; then
-  echo "PASS: no console.log/console.debug in src/"
+  echo "PASS: no console.log/console.debug in ${sources[*]}"
   exit 0
 fi
 

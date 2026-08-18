@@ -1,0 +1,40 @@
+{
+  "name": "@talentscout/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check",
+    "db:export": "drizzle-kit export --sql",
+    "db:migrate": "dotenv -e ../../.env.local -- tsx scripts/db-migrate.ts",
+    "db:seed": "dotenv -e ../../.env.local -- tsx scripts/db-seed.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@talentscout/eslint-config": "workspace:*",
+    "@talentscout/typescript-config": "workspace:*",
+    "@types/node": "^20",
+    "@vitest/coverage-v8": "^4.1.10",
+    "dotenv-cli": "^10.0.0",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-zod": "^0.8.3",
+    "eslint": "^9",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
