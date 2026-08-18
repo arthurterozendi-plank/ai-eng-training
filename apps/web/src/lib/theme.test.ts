@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyTheme,
   DARK_CLASS,
+  DEFAULT_THEME,
   readStoredTheme,
   resolveInitialTheme,
   storeTheme,
@@ -19,6 +20,10 @@ function stubPrefersDark(matches: boolean) {
     "matchMedia",
     vi.fn((media: string) => ({ matches, media })),
   );
+}
+
+function removeMatchMedia() {
+  vi.stubGlobal("matchMedia", undefined);
 }
 
 function blockStorage() {
@@ -58,6 +63,8 @@ describe("THEME_INIT_SCRIPT", () => {
     stored: string | null;
     prefersDark: boolean;
     blocked: boolean;
+    /** Some embedded WebViews ship no `matchMedia` at all. */
+    noMatchMedia?: boolean;
     expected: Theme;
   }[] = [
     {
@@ -116,13 +123,38 @@ describe("THEME_INIT_SCRIPT", () => {
       blocked: true,
       expected: "light",
     },
+    {
+      when: "matchMedia is unavailable and nothing is stored",
+      stored: null,
+      prefersDark: true,
+      blocked: false,
+      noMatchMedia: true,
+      expected: "light",
+    },
+    {
+      when: "matchMedia is unavailable but dark is stored",
+      stored: "dark",
+      prefersDark: false,
+      blocked: false,
+      noMatchMedia: true,
+      expected: "dark",
+    },
+    {
+      when: "storage is blocked and matchMedia is unavailable",
+      stored: null,
+      prefersDark: true,
+      blocked: true,
+      noMatchMedia: true,
+      expected: "light",
+    },
   ];
 
   it.each(cases)(
     "paints $expected, and agrees with resolveInitialTheme, when $when",
-    ({ stored, prefersDark, blocked, expected }) => {
+    ({ stored, prefersDark, blocked, noMatchMedia, expected }) => {
       if (stored !== null) window.localStorage.setItem(THEME_STORAGE_KEY, stored);
-      stubPrefersDark(prefersDark);
+      if (noMatchMedia) removeMatchMedia();
+      else stubPrefersDark(prefersDark);
       if (blocked) blockStorage();
 
       runInitScript();
@@ -226,5 +258,14 @@ describe("resolveInitialTheme", () => {
     stubPrefersDark(true);
 
     expect(resolveInitialTheme()).toBe("dark");
+  });
+
+  it("falls back to the default rather than throwing where matchMedia is unavailable", () => {
+    removeMatchMedia();
+
+    // ThemeToggle hands this straight to useState's lazy initializer, and the root layout renders
+    // it with no error boundary above — a throw here fails the whole page, not just the button.
+    expect(() => resolveInitialTheme()).not.toThrow();
+    expect(resolveInitialTheme()).toBe(DEFAULT_THEME);
   });
 });

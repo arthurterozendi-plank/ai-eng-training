@@ -23,11 +23,12 @@ const PREFERS_DARK_QUERY = "(prefers-color-scheme: dark)";
  * It toggles a single class instead of assigning `className`, because `<html>` also carries the
  * font classes — overwriting the class list would render the page unstyled.
  *
- * The storage read has its own `try`, separate from the one around the rest: a browser that
- * blocks storage throws on `getItem`, and a single outer `try` would abort before the
- * `prefers-color-scheme` fallback ran. `resolveInitialTheme` recovers from the same failure and
- * does reach that fallback, so a shared `try` would leave the two disagreeing — which is a
- * light-to-dark flash on exactly the browsers that block storage.
+ * Each fallible read gets its own `try`, and the apply always runs. Storage and `matchMedia` fail
+ * independently — blocked storage throws on `getItem`, and an embedded WebView may not implement
+ * `matchMedia` at all — so one shared `try` would abort the whole script on either, skipping both
+ * the remaining fallback and the apply. `resolveInitialTheme` recovers from exactly the same two
+ * failures, and the two must agree on every combination or the recruiter sees one theme painted
+ * and the other applied a moment later.
  *
  * The app sets no Content-Security-Policy today. Whoever adds one must give this script a
  * nonce or hash — an inline script rendered through `dangerouslySetInnerHTML` gets neither
@@ -35,9 +36,11 @@ const PREFERS_DARK_QUERY = "(prefers-color-scheme: dark)";
  */
 export const THEME_INIT_SCRIPT = `(function(){var t=null;try{t=localStorage.getItem(${JSON.stringify(
   THEME_STORAGE_KEY,
-)})}catch(e){}try{if(t!=="light"&&t!=="dark"){t=window.matchMedia(${JSON.stringify(
+)})}catch(e){}if(t!=="light"&&t!=="dark"){t=${JSON.stringify(
+  DEFAULT_THEME,
+)};try{if(window.matchMedia(${JSON.stringify(
   PREFERS_DARK_QUERY,
-)}).matches?"dark":"light"}var r=document.documentElement;r.classList.toggle(${JSON.stringify(
+)}).matches)t="dark"}catch(e){}}try{var r=document.documentElement;r.classList.toggle(${JSON.stringify(
   DARK_CLASS,
 )},t==="dark");r.style.colorScheme=t}catch(e){}})();`;
 
@@ -77,9 +80,28 @@ export function applyTheme(theme: Theme): void {
 }
 
 /**
+ * Whether the operating system asks for a dark theme. Falls back to `false` where `matchMedia`
+ * is unavailable or throws — some embedded WebViews and test environments have no implementation.
+ *
+ * The guard is not defensive padding: this runs inside `useState`'s lazy initializer in
+ * `ThemeToggle`, which the root layout renders with no error boundary above it, so an
+ * unhandled throw here fails the entire page render rather than just the toggle.
+ */
+function prefersDarkTheme(): boolean {
+  try {
+    return window.matchMedia(PREFERS_DARK_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The theme to start from: the stored preference when valid, otherwise the operating system's,
  * otherwise {@link DEFAULT_THEME}. Returns the default during server rendering, where neither
  * source exists — the inline script corrects `<html>` before the browser paints it.
+ *
+ * Every failure mode here is recovered exactly as {@link THEME_INIT_SCRIPT} recovers from it, so
+ * the theme React starts in always matches the one already painted.
  */
 export function resolveInitialTheme(): Theme {
   if (typeof window === "undefined") return DEFAULT_THEME;
@@ -87,5 +109,5 @@ export function resolveInitialTheme(): Theme {
   const stored = readStoredTheme();
   if (stored) return stored;
 
-  return window.matchMedia(PREFERS_DARK_QUERY).matches ? "dark" : DEFAULT_THEME;
+  return prefersDarkTheme() ? "dark" : DEFAULT_THEME;
 }
