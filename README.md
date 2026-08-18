@@ -1,6 +1,7 @@
 # ai-eng-training
 
-Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/ui.
+A Turborepo monorepo on pnpm workspaces: Next.js 16 (App Router) + TypeScript + Tailwind v4 +
+shadcn/ui, with Drizzle ORM in its own package.
 
 ## The project
 
@@ -35,54 +36,104 @@ pnpm dev
 
 App runs at http://localhost:3000.
 
+`.env.local` stays at the repository root and serves every workspace. Next.js only reads `.env`
+files from its own project directory and never from a parent, so `apps/web` and `packages/db`
+are both launched through `dotenv -e ../../.env.local --`. One file to edit, no copies to drift.
+
 ## Scripts
 
-| Script             | What it does                                                       |
-| ------------------ | ------------------------------------------------------------------ |
-| `pnpm dev`         | Dev server                                                         |
-| `pnpm build`       | Production build                                                   |
-| `pnpm start`       | Serve the production build                                         |
-| `pnpm typecheck`   | `tsc --noEmit`                                                     |
-| `pnpm lint`        | ESLint (`lint:fix` to autofix)                                     |
-| `pnpm format`      | Prettier write (`format:check` to verify)                          |
-| `pnpm test`        | Vitest once (`test:watch`, `test:coverage`)                        |
-| `pnpm check`       | typecheck + lint + format:check + test                             |
-| `pnpm db:generate` | Generate migration SQL from `src/lib/db/schema/` — no connection   |
-| `pnpm db:check`    | Validate the `drizzle/` migration folder — no connection           |
-| `pnpm db:export`   | Print the full generated DDL to stdout — no connection             |
-| `pnpm db:migrate`  | Apply `drizzle/` migrations (connects — see [Database](#database)) |
-| `pnpm db:seed`     | Insert the demo dataset (connects — see [Database](#database))     |
+Run these from the repository root. Turbo fans each one out to the workspaces that define it and
+caches the results, so re-running with nothing changed is nearly instant.
+
+| Script             | What it does                                                          |
+| ------------------ | --------------------------------------------------------------------- |
+| `pnpm dev`         | Dev server                                                            |
+| `pnpm build`       | Production build                                                      |
+| `pnpm start`       | Serve the production build                                            |
+| `pnpm typecheck`   | `next typegen` in the app, then `tsc --noEmit` in every workspace     |
+| `pnpm lint`        | ESLint (`lint:fix` to autofix)                                        |
+| `pnpm format`      | Prettier write (`format:check` to verify)                             |
+| `pnpm test`        | Vitest once (`test:watch`, `test:coverage`)                           |
+| `pnpm check`       | typecheck + lint + test, then format:check                            |
+| `pnpm db:generate` | Generate migration SQL from `packages/db/src/schema/` — no connection |
+| `pnpm db:check`    | Validate the migration folder — no connection                         |
+| `pnpm db:export`   | Print the full generated DDL to stdout — no connection                |
+| `pnpm db:migrate`  | Apply migrations (connects — see [Database](#database))               |
+| `pnpm db:seed`     | Insert the demo dataset (connects — see [Database](#database))        |
+
+To work in one workspace, filter: `pnpm --filter @talentscout/web test`.
+
+Formatting is the one task Turbo does not fan out. Prettier's import-sort and Tailwind-class
+plugins need a single shared config and one view of the tree, so `pnpm format` is one root pass
+over everything.
 
 ## Layout
 
+The repository is a Turborepo monorepo because the programme builds more than one deployable
+surface against one product: the later days add a scraper, a long-running extraction pipeline
+and a voice service, and each needs the same schema and the same lint and TypeScript rules as
+the web app. A single Next.js project would have forced either duplication or a deep-relative
+import mess between them.
+
 ```
-src/
-  app/          App Router routes, layouts, route handlers
-  components/   Shared React components
-    ui/         shadcn/ui primitives (generated — edit freely, they are yours)
-  hooks/        Client-side React hooks
-  lib/          Framework-agnostic helpers (cn, formatters, clients)
-  types/        Shared, app-wide types
-  env.ts        Zod-validated environment variables
+apps/
+  web/                    @talentscout/web — the Next.js application
+    src/
+      app/                App Router routes, layouts, route handlers
+      components/         Shared React components
+        ui/               shadcn/ui primitives (generated — edit freely, they are yours)
+      hooks/              Client-side React hooks
+      lib/                Framework-agnostic helpers (cn, formatters)
+      types/              Shared, app-wide types
+      env.ts              NODE_ENV and NEXT_PUBLIC_APP_URL, zod-validated
+packages/
+  db/                     @talentscout/db — Drizzle schema, migrations, seed, DB env
+  eslint-config/          @talentscout/eslint-config — `base` and `next`
+  typescript-config/      @talentscout/typescript-config — the tsconfig bases
 ```
 
-Import alias: `@/*` maps to `src/*`.
+Import alias: `@/*` maps to the **current workspace's** `src/*`. Across workspaces, import by
+package name — `@talentscout/db/schema/jobs` — never by a relative path that climbs out of one
+workspace into another. Turbopack transpiles workspace packages automatically, so no
+`transpilePackages` entry is needed.
+
+Only what a second workspace would genuinely share was extracted. `packages/db` exists because
+the schema is the contract every later surface writes against; the ESLint and TypeScript configs
+exist so a new workspace inherits the rules instead of re-deciding them. There is deliberately
+no shared Tailwind package: Tailwind v4 has no JS config, and the theme lives in a `globals.css`
+that `shadcn add` rewrites — a package would only fight that. Everything else stays inside its
+single caller until a second one appears.
 
 ## Environment variables
 
-Add the variable to the matching schema in `src/env.ts`, then to `.env.example`.
-Anything the browser reads must be prefixed `NEXT_PUBLIC_`. Import `env` from
-`@/env` instead of touching `process.env` directly — invalid config then fails
-loudly at startup rather than silently at runtime.
+Each workspace validates the keys it owns, in its own `src/env.ts` — the only module in that
+workspace allowed to touch `process.env`:
+
+| Workspace     | Owns                                  |
+| ------------- | ------------------------------------- |
+| `apps/web`    | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`     |
+| `packages/db` | `DATABASE_URL`, `DIRECT_DATABASE_URL` |
+
+Ownership follows the code that reads the value, so a package carries its own contract instead
+of depending on an application to validate it for it. A workspace that needs another's value
+imports it (`@talentscout/db/env`) rather than reading the variable a second time.
+
+Add the variable to the owning workspace's schema, then to the root `.env.example`. Anything the
+browser reads must be prefixed `NEXT_PUBLIC_`. Import `env` instead of touching `process.env`
+directly — invalid config then fails loudly at startup rather than silently at runtime.
 
 ## Database
 
-Schema lives under `src/lib/db/schema/` (Drizzle ORM, one table per file); generated migrations
-are committed under `drizzle/`. `drizzle.config.ts` declares no `dbCredentials`, so
-`db:generate`, `db:check` and `db:export` never open a connection — only `db:migrate` and
-`db:seed` do, against Postgres.
+Everything database-related lives in `packages/db`: schema under `packages/db/src/schema/`
+(Drizzle ORM, one table per file), committed migrations under `packages/db/drizzle/`, and the
+migrate and seed scripts under `packages/db/scripts/`. It is a package rather than a folder in
+the app because the schema is the contract every future surface writes against, and none of it
+is framework-specific.
 
-Two connection strings, both validated in `src/env.ts`:
+`packages/db/drizzle.config.ts` declares no `dbCredentials`, so `db:generate`, `db:check` and
+`db:export` never open a connection — only `db:migrate` and `db:seed` do, against Postgres.
+
+Two connection strings, both validated in `packages/db/src/env.ts`:
 
 - `DATABASE_URL` — the pooled connection (Supavisor, transaction mode). Nothing in this
   repo reads it yet; it is reserved for the runtime client a later change adds.
@@ -116,7 +167,8 @@ which re-runs every migration against a freshly emptied database. Hosted is seed
 pnpm dlx shadcn@latest add dialog
 ```
 
-Config lives in `components.json` (style `radix-nova`, Lucide icons, CSS variables).
+Run it from `apps/web` — config lives in `apps/web/components.json` (style `radix-nova`, Lucide
+icons, CSS variables), and the generated files land in `apps/web/src/components/ui/`.
 
 ## Routes
 
@@ -135,8 +187,9 @@ cached — a cached health check reports stale liveness.
 
 ## Testing
 
-Vitest + Testing Library, jsdom environment. Tests live next to their subject as
-`*.test.ts(x)` under `src/`. Setup is in `vitest.setup.ts`.
+Tests live next to their subject as `*.test.ts(x)` under the workspace's `src/`. Each workspace
+configures its own Vitest: `apps/web` runs jsdom with Testing Library (setup in
+`apps/web/vitest.setup.ts`), and `packages/db` runs the node environment with no DOM at all.
 
 ## MCP
 

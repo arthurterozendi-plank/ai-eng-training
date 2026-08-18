@@ -6,7 +6,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 
 # Scaffold an API route
 
-Create one endpoint directory under `src/app/api/`, following this repository's conventions.
+Create one endpoint directory under `apps/web/src/app/api/`, following this repository's conventions.
 Handler skeleton only — do not invent business logic, database calls, or an auth scheme the
 caller did not describe.
 
@@ -26,22 +26,23 @@ If `<name>` is missing, ask for it. Do not guess a route path.
 ## Step 1 — Read the conventions
 
 Read `CLAUDE.md` first — it is the source of truth. Then read the existing endpoint
-`src/app/api/status/route.ts` and `route.test.ts` for the house style: plain `Request`/`Response`
+`apps/web/src/app/api/status/route.ts` and `route.test.ts` for the house style: plain `Request`/`Response`
 (not `NextRequest`), `Response.json()`, `dynamic = "force-dynamic"` plus `Cache-Control: no-store`
 on live data.
 
-Read `src/env.ts` if the route needs configuration — it is the only module allowed to read
-environment variables.
+Read `apps/web/src/env.ts` if the route needs configuration — it is the only module in this
+application allowed to read environment variables. Database connection strings are not there:
+`@talentscout/db` validates those in `packages/db/src/env.ts`.
 
 ## Step 2 — Derive paths and check for collisions
 
 For `<name>` = `users`:
 
-| File                              | Purpose                                      |
-| --------------------------------- | -------------------------------------------- |
-| `src/app/api/users/route.ts`      | Handlers only                                |
-| `src/app/api/users/schema.ts`     | Zod request schemas + request/response types |
-| `src/app/api/users/route.test.ts` | Co-located Vitest suite                      |
+| File                                       | Purpose                                      |
+| ------------------------------------------ | -------------------------------------------- |
+| `apps/web/src/app/api/users/route.ts`      | Handlers only                                |
+| `apps/web/src/app/api/users/schema.ts`     | Zod request schemas + request/response types |
+| `apps/web/src/app/api/users/route.test.ts` | Co-located Vitest suite                      |
 
 **If `route.ts` already exists, stop and report it.** Adding a method to an existing route is a
 different job — ask before editing someone else's handler.
@@ -261,7 +262,7 @@ often find untested.
 ## Step 6 — Verify
 
 ```bash
-pnpm typecheck && pnpm vitest run src/app/api/<name>
+pnpm typecheck && pnpm --filter @talentscout/web exec vitest run src/app/api/<name>
 pnpm format
 ```
 
