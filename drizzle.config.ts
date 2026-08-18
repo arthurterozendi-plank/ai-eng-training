@@ -8,6 +8,9 @@ import { defineConfig } from "drizzle-kit";
  */
 export default defineConfig({
   dialect: "postgresql",
-  schema: "./src/lib/db/schema/*.ts",
+  // The extglob excludes co-located `*.test.ts` files: a plain `*.ts` glob matches them too,
+  // and drizzle-kit `require`s every matched file, which fails on a test file's top-level
+  // `vitest` import (measured: "Vitest cannot be imported ... using require()").
+  schema: "./src/lib/db/schema/!(*.test).ts",
   out: "./drizzle",
 });
