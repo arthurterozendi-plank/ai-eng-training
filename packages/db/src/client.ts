@@ -1,15 +1,15 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { env } from "@/env";
-import { applicationStageTransitions } from "@/schema/application-stage-transitions";
-import { applications } from "@/schema/applications";
-import { candidates } from "@/schema/candidates";
-import { interviews } from "@/schema/interviews";
-import { jobs } from "@/schema/jobs";
-import { notes } from "@/schema/notes";
-import { pipelineStages } from "@/schema/pipeline-stages";
-import * as relations from "@/schema/relations";
+import { env } from "./env";
+import { applicationStageTransitions } from "./schema/application-stage-transitions";
+import { applications } from "./schema/applications";
+import { candidates } from "./schema/candidates";
+import { interviews } from "./schema/interviews";
+import { jobs } from "./schema/jobs";
+import { notes } from "./schema/notes";
+import { pipelineStages } from "./schema/pipeline-stages";
+import * as relations from "./schema/relations";
 
 /**
  * Every table and every `relations()` declaration, in the shape Drizzle's query builder expects.
