@@ -171,6 +171,32 @@ pnpm dlx shadcn@latest add dialog
 Run it from `apps/web` — config lives in `apps/web/components.json` (style `radix-nova`, Lucide
 icons, CSS variables), and the generated files land in `apps/web/src/components/ui/`.
 
+## Theming
+
+Light and dark are both first-class. `globals.css` carries the full shadcn variable set under
+`:root` and a second set under `.dark`, and `@custom-variant dark (&:is(.dark *))` makes every
+`dark:` utility key off that class. The root layout toggles the class on `<html>`, and the
+recruiter's choice is persisted client-side in `localStorage` under `talentscout-theme`.
+
+The class is applied by an inline `<script>` in `<head>`, rendered from `THEME_INIT_SCRIPT` in
+`apps/web/src/components/theme-toggle/theme.ts`. The browser runs it synchronously while parsing
+the document, so the first paint is already in the right theme instead of flashing light and
+correcting after hydration — which is also why `<html>` carries `suppressHydrationWarning`. A
+cookie would let the server render the theme instead, but reading one in the root layout opts the
+whole app out of static prerendering, and nothing server-side needs to know the theme.
+
+The script only ever toggles one class, never assigns `className`: `<html>` also carries the font
+classes, so overwriting the list would render the page unstyled. A stored value that is not a
+theme falls back to the operating system's preference, then to light.
+
+**No `next-themes`.** It solves the same problem, but the flash-prevention and hydration
+mechanics have to be understood here regardless — the layout's `suppressHydrationWarning` is
+unexplainable without them — and the app already owns that story through
+`apps/web/src/hooks/use-mounted.ts`. The whole feature is one module and one button.
+
+The system preference seeds the default only. Once a recruiter picks a theme, changing the OS
+setting no longer moves the app.
+
 ## Routes
 
 | Route         | Purpose                                             |
