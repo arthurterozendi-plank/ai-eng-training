@@ -259,6 +259,35 @@ describe("buildSeedDataset — DoD 6: extraction payloads", () => {
     });
     expect(hasLowConfidencePayload).toBe(true);
   });
+
+  it("agrees with the authoritative candidate column on every high-confidence field it also models", () => {
+    type SeedCandidate = SeedDataset["candidates"][number];
+    const AUTHORITATIVE_GETTERS: Record<string, (candidate: SeedCandidate) => unknown> = {
+      candidateEmail: (candidate) => candidate.email,
+      yearsExperience: (candidate) => candidate.yearsExperience,
+    };
+    const candidatesById = new Map(
+      dataset.candidates.map((candidate) => [candidate.id, candidate]),
+    );
+
+    let checked = 0;
+    for (const application of dataset.applications) {
+      if (!application.extraction) continue;
+      const candidate = candidatesById.get(application.candidateId);
+      expect(candidate).toBeDefined();
+
+      for (const [key, field] of Object.entries(application.extraction.fields)) {
+        const getAuthoritative = AUTHORITATIVE_GETTERS[key];
+        // A field below the review threshold is allowed to disagree — that disagreement is
+        // exactly what a low confidence exists to flag (AI-112's gate). Only a field the model
+        // reported as trustworthy may never contradict the column it claims to describe.
+        if (!getAuthoritative || field.confidence < 0.6) continue;
+        checked++;
+        expect(field.value).toBe(getAuthoritative(candidate!));
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
 });
 
 describe("buildSeedDataset — DoD 7: interview/stage coherence", () => {
@@ -313,6 +342,25 @@ describe("buildSeedDataset — DoD 7: interview/stage coherence", () => {
       expect(interview.scheduledAt.getTime()).toBeLessThanOrEqual(
         application!.stageChangedAt!.getTime(),
       );
+    }
+  });
+
+  it("schedules at least one interview in the future, for an application still sitting in its anchor stage", () => {
+    const applicationsById = new Map(
+      dataset.applications.map((application) => [application.id, application]),
+    );
+
+    const upcoming = dataset.interviews.filter(
+      (interview) => interview.scheduledAt.getTime() > NOW.getTime(),
+    );
+    expect(upcoming.length).toBeGreaterThan(0);
+
+    for (const interview of upcoming) {
+      expect(interview.status).toBe("scheduled");
+      const application = applicationsById.get(interview.applicationId);
+      const anchorStage: PipelineStageKey =
+        interview.kind === "phone_screen" ? "screening" : "interview";
+      expect(application?.stage).toBe(anchorStage);
     }
   });
 });
@@ -451,6 +499,39 @@ describe("buildSeedDataset — DoD 13: candidate emails are unique and lowercase
       expect(emails.has(candidate.email)).toBe(false);
       emails.add(candidate.email);
     }
+  });
+});
+
+describe("buildSeedDataset — DoD 16: created_at carries a real time signal", () => {
+  /** The calendar day (UTC) a timestamp falls on, so "one createdAt per row" collapsing to a
+   * single seed-run instant is visible as a single distinct day rather than passing by accident. */
+  function calendarDay(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function distinctDays(dates: (Date | null | undefined)[]): Set<string> {
+    return new Set(dates.filter((date): date is Date => date != null).map(calendarDay));
+  }
+
+  it("never sets created_at in the future, for any table", () => {
+    const allCreatedAt: (Date | null | undefined)[] = [
+      ...dataset.jobs.map((row) => row.createdAt as Date | undefined),
+      ...dataset.candidates.map((row) => row.createdAt as Date | undefined),
+      ...dataset.applications.map((row) => row.createdAt as Date | undefined),
+      ...dataset.stageTransitions.map((row) => row.createdAt as Date | undefined),
+      ...dataset.interviews.map((row) => row.createdAt as Date | undefined),
+      ...dataset.notes.map((row) => row.createdAt as Date | undefined),
+    ];
+    for (const createdAt of allCreatedAt) {
+      expect(createdAt).toBeDefined();
+      expect(createdAt!.getTime()).toBeLessThanOrEqual(NOW.getTime());
+    }
+  });
+
+  it("spreads candidates, applications, and notes across more than one calendar day", () => {
+    expect(distinctDays(dataset.candidates.map((row) => row.createdAt)).size).toBeGreaterThan(1);
+    expect(distinctDays(dataset.applications.map((row) => row.createdAt)).size).toBeGreaterThan(1);
+    expect(distinctDays(dataset.notes.map((row) => row.createdAt)).size).toBeGreaterThan(1);
   });
 });
 

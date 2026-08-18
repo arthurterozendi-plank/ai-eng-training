@@ -27,7 +27,10 @@ const ALL_TABLES: PgTable[] = [
 
 /** Concatenation of every generated migration, in the order drizzle-kit would apply them. */
 function readGeneratedMigrationsSql(): string {
-  const migrationsDir = path.join(process.cwd(), "drizzle");
+  // Resolved from this file's own location, not `process.cwd()` — matches
+  // `scripts/db-migrate.ts`'s `MIGRATIONS_FOLDER`, and keeps working if vitest is ever invoked
+  // from a directory other than the repo root.
+  const migrationsDir = path.join(import.meta.dirname, "..", "..", "..", "drizzle");
   const files = fs
     .readdirSync(migrationsDir)
     .filter((file) => file.endsWith(".sql"))

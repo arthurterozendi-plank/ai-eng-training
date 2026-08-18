@@ -31,6 +31,7 @@ import {
   REJECTION_REASONS,
   TECHNICAL_DETAIL_PHRASES,
   WITHDRAWN_REASONS,
+  type ExtractionAssignmentDefinition,
 } from "./seed-data-content";
 
 /** The full deterministic dataset `buildSeedDataset` produces, one array per demo table. */
@@ -113,7 +114,12 @@ function slug(part: string): string {
     .replace(/[^a-z]/g, "");
 }
 
-const EMAIL_DOMAINS = ["gmail.com", "outlook.com", "proton.me", "icloud.com", "fastmail.com"];
+/**
+ * RFC 2606 reserves `.example` for exactly this use — sixty invented candidates at real
+ * mail-provider domains (gmail.com, outlook.com, ...) could collide with a live mailbox that
+ * belongs to an actual person. Named after `resumeUrlFor`'s `resumes.talentscout.example`, below.
+ */
+const CANDIDATE_EMAIL_DOMAIN = "candidates.talentscout.example";
 const PHONE_AREA_CODES = ["415", "212", "312", "512"];
 
 function nameParts(fullName: string): { first: string; last: string } {
@@ -122,9 +128,9 @@ function nameParts(fullName: string): { first: string; last: string } {
 }
 
 /** A fake-but-plausible email, lowercase and unique because every candidate's name is distinct. */
-function emailFor(fullName: string, index: number): string {
+function emailFor(fullName: string): string {
   const { first, last } = nameParts(fullName);
-  return `${slug(first)}.${slug(last)}@${EMAIL_DOMAINS[index % EMAIL_DOMAINS.length]}`;
+  return `${slug(first)}.${slug(last)}@${CANDIDATE_EMAIL_DOMAIN}`;
 }
 
 /** A fake NANP number in the `555-01XX` block reserved for fictional use — never a real line. */
@@ -142,6 +148,21 @@ function resumeUrlFor(fullName: string): string {
 function linkedinUrlFor(fullName: string, index: number): string {
   const { first, last } = nameParts(fullName);
   return `https://www.linkedin.com/in/${slug(first)}-${slug(last)}-${index}`;
+}
+
+/**
+ * Overwrites a `candidateEmail` extraction field's `value` with the candidate's authoritative
+ * email, so a hand-authored `EXTRACTION_ASSIGNMENTS` entry can never disagree with the column it
+ * models — the bug this guards against was a mail domain picked independently of `emailFor`'s
+ * derivation for the same candidate. Confidence and source stay exactly as authored: only the
+ * value a reader would compare against `candidates.email` is derived.
+ */
+function withAuthoritativeEmail(
+  fields: ExtractionAssignmentDefinition["fields"],
+  candidateEmail: string,
+): ExtractionAssignmentDefinition["fields"] {
+  if (!("candidateEmail" in fields)) return fields;
+  return { ...fields, candidateEmail: { ...fields.candidateEmail, value: candidateEmail } };
 }
 
 /** One (candidate, job) application pairing, before the funnel path is assigned. */
@@ -190,6 +211,15 @@ function gapDaysFor(stage: PipelineStageKey, rng: () => number): number {
  * (`appliedAt >= job.openedAt`, i.e. `appliedDaysAgo <= job.openedDaysAgo`). Every job's
  * `openedDaysAgo` (70+, see `JOB_DEFINITIONS`) is comfortably above every path's own range, so
  * this only ever narrows the draw — it never conflicts with the path's minimum.
+ *
+ * This clamps only the chain's *start*; the per-stage gaps summed onto it below are not
+ * separately clamped to `now`, leaving roughly four days of headroom in the worst case (a path's
+ * minimum `appliedDaysAgo` less its stages' maximum `GAP_DAYS_RANGE` draws). That headroom holds
+ * only because every job actually wired into `CANDIDATE_GROUPS` has `openedDaysAgo` far above the
+ * clamp's threshold, so it never engages. If a job with a small `openedDaysAgo` (the draft
+ * `Engineering Manager, Platform` posting is 6) is ever added to `CANDIDATE_GROUPS`, this clamp
+ * would engage, the four days of headroom would not be enough for some paths, and a transition
+ * could land after `now` with no obvious cause in the failing test.
  */
 function appliedDaysAgoFor(pathKey: string, jobOpenedDaysAgo: number, rng: () => number): number {
   const [min, max] = APPLIED_DAYS_AGO_RANGE[pathKey];
@@ -244,10 +274,16 @@ function closeOutForJobClosure({
       ? appliedAt.getTime()
       : closedAt.getTime() - stageCount * HOUR_MS;
   const span = closedAt.getTime() - start;
-  const dates = Array.from(
-    { length: stageCount },
-    (_, i) => new Date(start + (span * i) / (stageCount - 1)),
-  );
+  // `stageCount - 1` is the divisor below; a single-stage path has nothing to space out, and
+  // dividing by zero would otherwise produce a silent NaN/Infinity date. No path in
+  // `PATH_LIBRARY` is a single terminal stage today, so this branch is unreached, not untested.
+  const dates =
+    stageCount === 1
+      ? [new Date(start)]
+      : Array.from(
+          { length: stageCount },
+          (_, i) => new Date(start + (span * i) / (stageCount - 1)),
+        );
   return { path: finalPath, transitionDates: dates };
 }
 
@@ -359,6 +395,12 @@ function clampToTerminal(plan: ApplicationPlan, now: Date, scheduledAt: Date): D
  * Builds one interview row anchored to `kind`'s implied stage — `screening` for `phone_screen`,
  * `interview` for every other kind (§5 slice 7) — scheduled at or after the application actually
  * entered that stage, and never after the application's own terminal transition.
+ *
+ * `scheduleFrom: "now"` draws the offset from `now` rather than from the anchor transition, for
+ * the handful of still-in-progress applications the seed deliberately books ahead: without it,
+ * every draw is anchor-relative and, for this dataset's actual anchor dates, none happens to land
+ * after `now` — leaving `interview_status = 'scheduled'` with zero seeded rows and the
+ * `scheduledAt > now` branch below dead code.
  */
 function buildInterview({
   rng,
@@ -367,6 +409,7 @@ function buildInterview({
   candidateName,
   kind,
   offsetRange,
+  scheduleFrom = "anchor",
 }: {
   rng: () => number;
   now: Date;
@@ -374,17 +417,21 @@ function buildInterview({
   candidateName: string;
   kind: InterviewKindLiteral;
   offsetRange: [number, number];
+  scheduleFrom?: "anchor" | "now";
 }): NewInterview {
   const anchorStage: PipelineStageKey = kind === "phone_screen" ? "screening" : "interview";
   const anchorIndex = plan.path.indexOf(anchorStage);
   const anchorDate = plan.transitionDates[anchorIndex];
+  const scheduleBase = scheduleFrom === "now" ? now : anchorDate;
   const scheduledAt = clampToTerminal(
     plan,
     now,
-    addDays(anchorDate, nextInt(rng, offsetRange[0], offsetRange[1])),
+    addDays(scheduleBase, nextInt(rng, offsetRange[0], offsetRange[1])),
   );
 
   if (scheduledAt > now) {
+    // The row itself can't have been written in the future — it was booked just now, for a
+    // session that hasn't happened yet.
     return {
       id: nextId(rng),
       applicationId: plan.id,
@@ -396,6 +443,7 @@ function buildInterview({
       location: locationFor(kind, rng),
       recommendation: null,
       feedback: null,
+      createdAt: now,
     };
   }
 
@@ -414,6 +462,7 @@ function buildInterview({
       feedback: didNotShow
         ? "Candidate did not join; recruiter is following up to reschedule."
         : "Cancelled by recruiter due to a scheduling conflict; will rebook.",
+      createdAt: scheduledAt,
     };
   }
 
@@ -432,6 +481,7 @@ function buildInterview({
     location: locationFor(kind, rng),
     recommendation: recommendationFor(sentiment, rng),
     feedback: frame(candidateName, detail),
+    createdAt: scheduledAt,
   };
 }
 
@@ -457,22 +507,13 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
     requirements: def.requirements,
     openedAt: addDays(now, -def.openedDaysAgo),
     closedAt: def.closedDaysAgo === null ? null : addDays(now, -def.closedDaysAgo),
+    createdAt: addDays(now, -def.openedDaysAgo),
   }));
 
+  // Only the id draw happens here — it consumes `rng` in the same position every prior slice
+  // relied on. The row literal itself is built after the pairs loop below, once each
+  // candidate's earliest `appliedAt` is known, without disturbing that draw order.
   const candidateIds = CANDIDATE_DEFINITIONS.map(() => nextId(rng));
-  const candidates: NewCandidate[] = CANDIDATE_DEFINITIONS.map((def, index) => ({
-    id: candidateIds[index],
-    fullName: def.fullName,
-    email: emailFor(def.fullName, index),
-    phone: phoneFor(index),
-    location: def.location,
-    headline: def.headline,
-    summary: def.summary,
-    resumeText: def.resumeText,
-    resumeUrl: resumeUrlFor(def.fullName),
-    linkedinUrl: linkedinUrlFor(def.fullName, index),
-    yearsExperience: def.yearsExperience,
-  }));
 
   const pairs = buildCandidateJobPairs();
   const pathKeys = buildPathAssignments(rng);
@@ -530,6 +571,7 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
         occurredAt: transitionDates[step],
         changedBy: fromStage === null ? null : pick(rng, RECRUITING_AUTHOR_NAMES),
         reason: fromStage === null ? null : reasonFor(stage, rng),
+        createdAt: transitionDates[step],
       });
     });
 
@@ -539,7 +581,10 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
           schemaVersion: 1,
           model: assignment.model,
           extractedAt: addHours(transitionDates[0], assignment.extractedAfterHours).toISOString(),
-          fields: assignment.fields,
+          fields: withAuthoritativeEmail(
+            assignment.fields,
+            emailFor(CANDIDATE_DEFINITIONS[pair.candidateIndex].fullName),
+          ),
         }
       : null;
 
@@ -553,6 +598,7 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
       appliedAt: transitionDates[0],
       coverLetter: coverLetterByPair.get(`${pair.candidateIndex}:${pair.jobIndex}`) ?? null,
       extraction,
+      createdAt: transitionDates[0],
     });
 
     plans.push({
@@ -564,8 +610,56 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
     });
   });
 
+  /**
+   * A candidate row's `createdAt` is the moment they first entered the pipeline — the earliest
+   * `applied_at` across their applications, which every candidate has at least one of (every
+   * `CANDIDATE_GROUPS` cohort has `jobIndexes.length >= 1`). Computed from `plans` rather than a
+   * new draw, so it matches the applications above by construction and needs no extra `rng` call.
+   */
+  const earliestAppliedAtByCandidateIndex = new Map<number, Date>();
+  for (const plan of plans) {
+    const appliedAt = plan.transitionDates[0];
+    const earliest = earliestAppliedAtByCandidateIndex.get(plan.candidateIndex);
+    if (!earliest || appliedAt.getTime() < earliest.getTime()) {
+      earliestAppliedAtByCandidateIndex.set(plan.candidateIndex, appliedAt);
+    }
+  }
+
+  const candidates: NewCandidate[] = CANDIDATE_DEFINITIONS.map((def, index) => ({
+    id: candidateIds[index],
+    fullName: def.fullName,
+    email: emailFor(def.fullName),
+    phone: phoneFor(index),
+    location: def.location,
+    headline: def.headline,
+    summary: def.summary,
+    resumeText: def.resumeText,
+    resumeUrl: resumeUrlFor(def.fullName),
+    linkedinUrl: linkedinUrlFor(def.fullName, index),
+    yearsExperience: def.yearsExperience,
+    createdAt: earliestAppliedAtByCandidateIndex.get(index)!,
+  }));
+
+  const currentlyIn = (stage: PipelineStageKey) =>
+    plans.filter((plan) => plan.path[plan.path.length - 1] === stage);
+
+  /**
+   * A handful of still-open applications get their next round booked ahead of `now` rather than
+   * behind it — a recruiter's "interviews this week" view has rows to show. Drawn from
+   * applications actually sitting in the round's anchor stage today (not yet moved on), so a
+   * `phone_screen` only lands on someone still in `screening` and a `technical`/`final` only on
+   * someone still in `interview` — never a stage that round would already have moved them past.
+   * Excluded from the historical pools below so the same application is not also given a
+   * same-kind interview dated in the past.
+   */
+  const upcomingPhoneScreenPlans = currentlyIn("screening").slice(0, 1);
+  const upcomingInterviewPlans = currentlyIn("interview").slice(0, 2);
+  const upcomingPlanIds = new Set(
+    [...upcomingPhoneScreenPlans, ...upcomingInterviewPlans].map((plan) => plan.id),
+  );
+
   const eligibleFor = (stage: PipelineStageKey) =>
-    plans.filter((plan) => plan.path.includes(stage));
+    plans.filter((plan) => plan.path.includes(stage) && !upcomingPlanIds.has(plan.id));
   const phoneScreenPlans = eligibleFor("screening").slice(0, 14);
   const technicalPlans = eligibleFor("interview").slice(0, 14);
   const offerReachedPlans = eligibleFor("offer");
@@ -576,6 +670,7 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
     plan: ApplicationPlan;
     kind: InterviewKindLiteral;
     offsetRange: [number, number];
+    scheduleFrom?: "anchor" | "now";
   }[] = [
     ...phoneScreenPlans.map((plan) => ({
       plan,
@@ -597,17 +692,31 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
       kind: "final" as const,
       offsetRange: [10, 18] as [number, number],
     })),
+    ...upcomingPhoneScreenPlans.map((plan) => ({
+      plan,
+      kind: "phone_screen" as const,
+      offsetRange: [1, 4] as [number, number],
+      scheduleFrom: "now" as const,
+    })),
+    ...upcomingInterviewPlans.map((plan, index) => ({
+      plan,
+      kind: (index === 0 ? "technical" : "final") as InterviewKindLiteral,
+      offsetRange: [2, 6] as [number, number],
+      scheduleFrom: "now" as const,
+    })),
   ];
 
-  const interviews: NewInterview[] = interviewRounds.map(({ plan, kind, offsetRange }) =>
-    buildInterview({
-      rng,
-      now,
-      plan,
-      candidateName: candidates[plan.candidateIndex].fullName,
-      kind,
-      offsetRange,
-    }),
+  const interviews: NewInterview[] = interviewRounds.map(
+    ({ plan, kind, offsetRange, scheduleFrom }) =>
+      buildInterview({
+        rng,
+        now,
+        plan,
+        candidateName: candidates[plan.candidateIndex].fullName,
+        kind,
+        offsetRange,
+        scheduleFrom,
+      }),
   );
 
   const notes: NewNote[] = [];
@@ -622,6 +731,9 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
         body,
         author: pick(rng, RECRUITING_AUTHOR_NAMES),
         pinned: noteIndex === JOB_NOTES[jobIndex].length - 1,
+        // Hours, not days: job 7 (the draft) is only 6 days old, and this must stay well under
+        // that even at the last note in the array.
+        createdAt: addHours(jobs[jobIndex].openedAt!, 4 + noteIndex * 20),
       });
     });
   });
@@ -638,6 +750,12 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
       body: frame(candidate.fullName, definition.noteDetail),
       author: pick(rng, RECRUITING_AUTHOR_NAMES),
       pinned: false,
+      // Shortly after this candidate's earliest application — every path's minimum
+      // `appliedDaysAgo` (5 days) comfortably outlasts the largest offset here.
+      createdAt: addHours(
+        earliestAppliedAtByCandidateIndex.get(candidateIndex)!,
+        6 + (candidateIndex % 6) * 12,
+      ),
     });
   }
 
@@ -654,6 +772,7 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
       body: frame(candidate.fullName, job.title),
       author: pick(rng, RECRUITING_AUTHOR_NAMES),
       pinned: false,
+      createdAt: addHours(plan.transitionDates[0], 6 + (pairIndex % 6) * 12),
     });
   }
 

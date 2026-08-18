@@ -24,7 +24,11 @@ async function main(): Promise<void> {
   const files = listMigrationFiles();
 
   if (dryRun) {
-    console.log(`[db-migrate] --dry-run: would apply ${files.length} migration(s):`);
+    // Never connects, so it has no way to know which of these are already applied — it lists
+    // the folder's contents, not a plan.
+    console.log(
+      `[db-migrate] --dry-run: ${files.length} migration file(s) in ${MIGRATIONS_FOLDER}:`,
+    );
     for (const file of files) {
       console.log(`  ${file}`);
     }

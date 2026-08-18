@@ -1016,7 +1016,7 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
     extractedAfterHours: 6,
     fields: {
       candidateEmail: {
-        value: "marcus.whitfield@gmail.com",
+        value: "marcus.whitfield@candidates.talentscout.example",
         confidence: 0.98,
         source: "resume.pdf#page=1",
       },
@@ -1035,7 +1035,7 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
     extractedAfterHours: 9,
     fields: {
       candidateEmail: {
-        value: "ethan.brooks@outlook.com",
+        value: "ethan.brooks@candidates.talentscout.example",
         confidence: 0.96,
         source: "resume.pdf#page=1",
       },
@@ -1064,7 +1064,7 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
     extractedAfterHours: 5,
     fields: {
       candidateEmail: {
-        value: "priya.nandakumar@proton.me",
+        value: "priya.nandakumar@candidates.talentscout.example",
         confidence: 0.97,
         source: "resume.pdf#page=1",
       },
@@ -1155,7 +1155,7 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
     extractedAfterHours: 5,
     fields: {
       candidateEmail: {
-        value: "petra.novak@icloud.com",
+        value: "petra.novak@candidates.talentscout.example",
         confidence: 0.97,
         source: "resume.pdf#page=1",
       },
