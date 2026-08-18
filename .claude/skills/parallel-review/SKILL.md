@@ -49,9 +49,9 @@ Each prompt carries: the resolved target, the changed file list, and the instruc
 only. For example:
 
 > Review the diff of branch `pr/foo` against `main`, including uncommitted work. Changed files:
-> `src/app/api/orders/route.ts`, `src/app/api/orders/schema.ts`,
-> `src/components/order-list/order-list.tsx`. Report findings only — do not edit any file and do
-> not run `pnpm check`; the caller applies fixes.
+> `apps/web/src/app/api/orders/route.ts`, `apps/web/src/app/api/orders/schema.ts`,
+> `apps/web/src/components/order-list/order-list.tsx`. Report findings only — do not edit any
+> file and do not run `pnpm check`; the caller applies fixes.
 
 Do not review the diff yourself while they run — that is the duplication this skill exists to
 avoid. Wait for all four.
@@ -85,7 +85,8 @@ missing lane reads as "clean".
 - Adding zod validation at a boundary that has none
 - Sequential independent `await`s → `Promise.all`
 - Deep relative import → `@/*`
-- A missing JSDoc on a new export in `src/lib/`, `src/types/`, or `src/env.ts`
+- A missing JSDoc on a new export in `apps/web/src/lib/`, `apps/web/src/types/`, a `src/env.ts`,
+  or `packages/db`
 - A missing test for changed behaviour
 
 **Report instead of fixing** when it is a judgment call:
@@ -113,7 +114,7 @@ If it fails, fix your own fallout or revert your change. Never hand back a red t
 ## Output
 
 ```
-critical  src/app/api/orders/route.ts:24  [security]
+critical  apps/web/src/app/api/orders/route.ts:24  [security]
   Handler returns any order by id with no ownership check.
   Fails when: an authenticated user posts another user's orderId and reads that order.
   Needs a decision: scope the lookup to the session user — confirm that is the intended policy.

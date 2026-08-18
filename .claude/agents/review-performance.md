@@ -127,7 +127,7 @@ your report with the other three and applies fixes.
 Findings, most-severe first, one entry each:
 
 ```
-high  src/app/dashboard/page.tsx:18  [perf]
+high  apps/web/src/app/dashboard/page.tsx:18  [perf]
   Three independent awaits run sequentially before anything renders.
   Costs: 3 sequential round trips (~600ms observed budget) where Promise.all costs 1.
   Fix: `const [a, b, c] = await Promise.all([getA(), getB(), getC()])`.

@@ -100,7 +100,8 @@ something is unused or safe to change.
 - Server Actions missing `"use server"`, or missing input validation. (`review-security` owns the
   authorization gap; you own the crash or corrupt write.)
 - `useEffect` deriving state that could be computed during render. This project's ESLint rejects
-  `setState` in an effect body — `src/hooks/use-mounted.ts` shows the `useSyncExternalStore` route.
+  `setState` in an effect body — `apps/web/src/hooks/use-mounted.ts` shows the
+  `useSyncExternalStore` route.
 - Missing or unstable `key` props; index-as-key on a reorderable list.
 
 ### Cache staleness
@@ -128,7 +129,7 @@ You are **read-only**. Do not edit, do not run `pnpm check`, do not stage anythi
 Findings, most-severe first, one entry each:
 
 ```
-critical  src/app/api/status/route.ts:12  [bug]
+critical  apps/web/src/app/api/status/route.ts:12  [bug]
   Route serves a build-time timestamp because dynamic="force-dynamic" is missing.
   Fails when: any request after the build — `generatedAt` is frozen at build time.
   Fix: add `export const dynamic = "force-dynamic"` beside the existing no-store header.

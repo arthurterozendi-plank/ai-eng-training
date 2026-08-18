@@ -29,7 +29,9 @@ the harms are genuinely different.
 Next.js 16 (App Router, Turbopack) · React 19 · TypeScript 5.9 strict · zod 4 · pnpm.
 Read `CLAUDE.md` for the full conventions. Two that matter to you:
 
-- `src/env.ts` is the only module permitted to read `process.env`. Server values live in
+- A workspace's own `src/env.ts` is the only module in it permitted to read `process.env`
+  (`apps/web` owns `NODE_ENV` and `NEXT_PUBLIC_APP_URL`; `packages/db` owns the two Postgres
+  connection strings). Server values live in
   `serverSchema`; anything the browser needs must be prefixed `NEXT_PUBLIC_`.
 - Every API route validates its input with zod at the boundary, in a `schema.ts` beside the
   handler.
@@ -54,7 +56,7 @@ Use `main...HEAD` (three dots). If the branch _is_ `main`, or the diff is empty,
 Read every changed file **in full**, then answer these before judging anything:
 
 - Which changed modules are reachable by an unauthenticated HTTP request? Every
-  `src/app/api/**/route.ts` and every `"use server"` function is a public endpoint.
+  `apps/web/src/app/api/**/route.ts` and every `"use server"` function is a public endpoint.
 - Which changed values originate from the caller — body, search params, headers, cookies,
   route params, uploaded files?
 - Which changed values originate server-side and must never reach the client?
@@ -94,12 +96,12 @@ Grep the change:
 git diff main...HEAD -U0 | grep -nE 'process\.env|NEXT_PUBLIC_|api[_-]?key|secret|token|password|Authorization'
 ```
 
-- `process.env` read anywhere but `src/env.ts`.
+- `process.env` read anywhere but the owning workspace's `src/env.ts`.
 - A server-only value passed as a prop to a Client Component, embedded in a `"use client"`
   module, or serialized into rendered markup. It ships to the browser in plain text.
 - A secret prefixed `NEXT_PUBLIC_` that should not be public — that prefix inlines the value into
   the client bundle at build time.
-- Credentials, tokens, or keys committed to the repo or to `.env.example`.
+- Credentials, tokens, or keys committed to the repo or to the root `.env.example`.
 - Responses returning more of a record than the caller needs — password hashes, internal ids,
   other users' fields — because the whole row was passed to `Response.json()`.
 - Stack traces, raw exception messages, or internal identifiers returned to the client. Log the
@@ -136,7 +138,7 @@ your report with the other three and applies fixes.
 Findings, most-severe first, one entry each:
 
 ```
-critical  src/app/api/orders/route.ts:24  [security]
+critical  apps/web/src/app/api/orders/route.ts:24  [security]
   Handler reads `orderId` from the body and returns the order without checking ownership.
   Attack: any authenticated user POSTs {"orderId":"<someone else's id>"} and reads that order.
   Fix: look up the order scoped to the session user; return 404 when it does not match.
