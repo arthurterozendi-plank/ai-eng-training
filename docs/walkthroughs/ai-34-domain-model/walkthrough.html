@@ -1,0 +1,3377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flash Session — AI-34 TalentScout domain model</title>
+    <!--
+  Plank harness — flash-session walkthrough for AI-34 (feat/ai-34-domain-model).
+  ONE self-contained file. No external assets (inline CSS + JS + SVG) so it
+  opens anywhere offline and pastes into Slack/Notion/email.
+
+  Level 0 (map): intro cards + decision strip + collapsed evidence trail + the
+  feature rail (the plan's eight slices) and their fragment cards.
+  Level 1 (fragment): one `.frag-detail` per card, matched by `data-global`
+  (flat document order, 0-based), holding the literal HTML-escaped diff hunk.
+  Navigate: click a feature, then a card (or Tab + Enter) to zoom in;
+  ←/→ move between fragments, Esc / "Zoom out" returns, F toggles fullscreen.
+-->
+    <style>
+      :root {
+        --orange: #ff6b2c;
+        --orange-soft: #fff1ea;
+        --green: #1e9e6a;
+        --green-soft: #e8f6ef;
+        --red: #c2452f;
+        --red-soft: #fdebe8;
+        --ink: #1a1a1a;
+        --muted: #6b7280;
+        --line: #e7e7e7;
+        --bg: #ffffff;
+        --radius: 16px;
+        --maxw: 1120px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font:
+          16px/1.55 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        color: var(--ink);
+        background: radial-gradient(120% 120% at 50% 0%, #fffdfb 0%, #f6f7f8 100%);
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: var(--orange);
+      }
+      :focus-visible {
+        outline: 3px solid var(--orange);
+        outline-offset: 2px;
+        border-radius: 6px;
+      }
+
+      .deck {
+        max-width: var(--maxw);
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .brand .mark {
+        width: 34px;
+        height: 34px;
+      }
+      .brand h1 {
+        font-size: 18px;
+        margin: 0;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .brand .tag {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 10px;
+      }
+
+      code,
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .kicker {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--orange);
+        background: var(--orange-soft);
+        padding: 5px 10px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 18px;
+        background: #fcfcfd;
+      }
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .pill {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 3px 10px;
+        margin: 2px 4px 2px 0;
+      }
+      .pill.good {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+      .pill.warn {
+        color: #b45309;
+        background: #fef3c7;
+      }
+
+      /* ---- Level 0: MAP ---- */
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+
+      .intro-cards {
+        display: grid;
+        grid-template-columns: 1fr 1.3fr 1.05fr;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+      .intro-cards h2 {
+        font-size: 17px;
+        margin: 0 0 6px;
+        line-height: 1.25;
+      }
+      .intro-cards p {
+        margin: 0.3em 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .intro-cards ul {
+        margin: 0.4em 0 0;
+        padding-left: 18px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .intro-cards li {
+        margin: 2px 0;
+      }
+
+      .also {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .also .card {
+        padding: 12px 14px;
+      }
+      .also strong {
+        display: block;
+        font-size: 13.5px;
+        margin-bottom: 3px;
+      }
+      .also p {
+        margin: 0;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .also .no {
+        color: var(--red);
+        font-weight: 600;
+      }
+
+      details.evidence-trail {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bg);
+        margin-bottom: 22px;
+        overflow: hidden;
+      }
+      details.evidence-trail summary {
+        cursor: pointer;
+        list-style: none;
+        padding: 14px 20px;
+        font-weight: 700;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      details.evidence-trail summary::-webkit-details-marker {
+        display: none;
+      }
+      details.evidence-trail summary::before {
+        content: "▸";
+        color: var(--orange);
+        display: inline-block;
+        transition: transform 0.15s ease;
+      }
+      details.evidence-trail[open] summary::before {
+        transform: rotate(90deg);
+      }
+      .evidence-body {
+        padding: 4px 20px 20px;
+      }
+
+      .loop {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+        margin: 8px 0 6px;
+      }
+      .node {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 12px;
+        text-align: center;
+        background: #fff;
+      }
+      .node .num {
+        position: absolute;
+        top: 8px;
+        right: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .node .check {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--green-soft);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 2px auto 8px;
+        color: var(--green);
+        font-weight: 800;
+        font-size: 12px;
+      }
+      .node strong {
+        display: block;
+        font-size: 15px;
+      }
+      .node small {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+        display: block;
+        margin-top: 4px;
+      }
+      .node .badge {
+        margin-top: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--orange);
+        background: var(--orange-soft);
+        border-radius: 999px;
+        padding: 3px 8px;
+        display: inline-block;
+      }
+      .arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--orange);
+        font-size: 18px;
+      }
+      .payoffs {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+      }
+      .payoffs div {
+        font-size: 13px;
+      }
+      .payoffs strong {
+        display: block;
+        font-size: 14px;
+      }
+      .payoffs span {
+        color: var(--muted);
+      }
+
+      .mapgrid {
+        display: grid;
+        grid-template-columns: 230px 1fr;
+        gap: 18px;
+      }
+      .rail {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .feature-btn {
+        text-align: left;
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+        font: inherit;
+        color: var(--ink);
+      }
+      .feature-btn strong {
+        display: block;
+        font-size: 13px;
+      }
+      .feature-btn small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 2px;
+      }
+      .feature-btn[aria-selected="true"] {
+        border-color: var(--orange);
+        background: var(--orange-soft);
+      }
+      .feature-btn:hover {
+        border-color: var(--orange);
+      }
+
+      .feature-panel {
+        display: none;
+      }
+      .feature-panel.active {
+        display: block;
+      }
+      .feature-summary {
+        margin-bottom: 14px;
+      }
+      .feature-summary h2 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      .feature-summary p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .fragments {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .fragment-card {
+        text-align: left;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        padding: 14px 16px;
+        cursor: pointer;
+        font: inherit;
+        color: var(--ink);
+      }
+      .fragment-card:hover {
+        border-color: var(--orange);
+      }
+      .frag-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .chip {
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 2px 8px;
+        white-space: nowrap;
+      }
+      .chip.delta {
+        background: #f3f4f6;
+        color: var(--muted);
+      }
+      .chip .plus {
+        color: var(--green);
+      }
+      .chip .minus {
+        color: var(--red);
+      }
+      .frag-desc {
+        margin: 0;
+        font-size: 13.5px;
+        color: var(--muted);
+      }
+
+      /* ---- Level 1: FRAGMENT ---- */
+      .frag-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .frag-header .titles {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .feature-tag {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #fragPos {
+        margin-left: auto;
+      }
+
+      .frag-why {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fcfcfd;
+        padding: 14px 16px;
+        margin-bottom: 14px;
+        font-size: 14px;
+      }
+      .frag-why h3 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .frag-why p {
+        margin: 0.35em 0;
+      }
+
+      .frag-detail {
+        display: none;
+      }
+      .frag-detail.active {
+        display: block;
+      }
+
+      .diff {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+        background: #fff;
+      }
+      .diff-line {
+        display: grid;
+        grid-template-columns: 44px 18px 1fr;
+        align-items: start;
+        min-width: max-content;
+      }
+      .diff-line .ln {
+        color: var(--muted);
+        text-align: right;
+        padding: 2px 8px;
+        background: #fafafa;
+        border-right: 1px solid var(--line);
+        user-select: none;
+      }
+      .diff-line .gutter {
+        text-align: center;
+        padding: 2px 0;
+        user-select: none;
+        color: var(--muted);
+      }
+      /* A <pre>, not a <span>: the hunk text is byte-literal and must survive any HTML formatter
+     that would otherwise reflow it. Reset the UA's margin/font so it matches the other cells. */
+      .diff-line .code {
+        margin: 0;
+        font: inherit;
+        padding: 2px 10px 2px 4px;
+        white-space: pre;
+      }
+      .diff-line.add {
+        background: var(--green-soft);
+      }
+      .diff-line.add .gutter {
+        color: var(--green);
+        font-weight: 700;
+      }
+      .diff-line.del {
+        background: var(--red-soft);
+      }
+      .diff-line.del .gutter {
+        color: var(--red);
+        font-weight: 700;
+      }
+      .diff-line.ctx .gutter {
+        color: transparent;
+      }
+      .diff-line.skip {
+        background: #fafafa;
+      }
+      .diff-line.skip .code {
+        color: var(--muted);
+      }
+
+      .frag-nav {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 18px;
+      }
+
+      /* ---- nav / buttons ---- */
+      .nbtn {
+        border: 1px solid var(--line);
+        background: #fff;
+        border-radius: 10px;
+        padding: 7px 12px;
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      .nbtn:hover {
+        border-color: var(--orange);
+        color: var(--orange);
+      }
+      .nbtn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .count {
+        font-size: 12px;
+        color: var(--muted);
+        min-width: 110px;
+        text-align: center;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .view.active {
+          animation: fade 0.25s ease both;
+        }
+        @keyframes fade {
+          from {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          to {
+            opacity: 1;
+            transform: none;
+          }
+        }
+      }
+
+      @media (max-width: 820px) {
+        .intro-cards {
+          grid-template-columns: 1fr;
+        }
+        .also {
+          grid-template-columns: 1fr;
+        }
+        .mapgrid {
+          grid-template-columns: 1fr;
+        }
+        .rail {
+          flex-direction: row;
+          flex-wrap: wrap;
+        }
+        .fragments {
+          grid-template-columns: 1fr;
+        }
+        .loop,
+        .payoffs {
+          grid-template-columns: 1fr;
+        }
+        .arrow {
+          display: none;
+        }
+        .grid2 {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="deck">
+      <div class="brand">
+        <!-- inline harness mark -->
+        <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+          <g fill="#FF6B2C">
+            <path
+              d="M24 6c2 4 6 6 11 6-3 3-4 7-4 11h-4c0-3-1-5-3-7-2 2-3 4-3 7h-4c0-4-1-8-4-11 5 0 9-2 11-6z"
+            />
+            <circle cx="24" cy="30" r="5" />
+            <path d="M14 34l-4 8h6l3-6zM34 34l4 8h-6l-3-6z" />
+          </g>
+        </svg>
+        <h1>Flash Session — AI-34 · TalentScout domain model</h1>
+        <span class="tag">~60 seconds · Plank harness</span>
+      </div>
+
+      <!-- ══════════════ LEVEL 0 — MAP ══════════════ -->
+      <section id="view-map" class="view active" aria-hidden="false">
+        <div class="intro-cards">
+          <div class="card">
+            <span class="kicker">What &amp; why</span>
+            <h2>
+              TalentScout gets a database: seven tables, migrations and 90 seeded applications.
+            </h2>
+            <p>
+              There was no persistence at all. A recruiter reconstructed a pipeline from an inbox —
+              nothing queryable, nothing chartable, nothing an agent could be handed.
+            </p>
+            <ul>
+              <li>
+                Day 5 queries it over MCP, Day 9 charts it, Day 13 indexes its free text, Day 17
+                writes extractions into it, Day 18 gates those writes.
+              </li>
+              <li>
+                <code>pipeline_stages</code> · <code>jobs</code> · <code>candidates</code> ·
+                <code>applications</code> · <code>application_stage_transitions</code> ·
+                <code>interviews</code> · <code>notes</code>
+              </li>
+              <li>
+                Ticket: <code>AI-34</code> — "Model jobs, candidates and applications in Postgres
+                for recruiters tracking a pipeline"
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <span class="kicker">The decision</span>
+            <h2>
+              <code>applications.stage</code> is a text FK into a seeded lookup table — not a pg
+              enum.
+            </h2>
+            <div class="grid2">
+              <div>
+                <strong>We chose</strong>
+                <p>
+                  A <code>pipeline_stages</code> table seeded by migration, referenced by
+                  <code>applications.stage</code>, coexisting with an
+                  <code>application_stage_transitions</code> history table.
+                </p>
+                <p>
+                  Order and labels stay <em>data</em>, so Day 9 can sort a funnel chart on
+                  <code>position</code> and a recruiter can rename a stage. The projection column
+                  keeps every dashboard query single-table and makes "every application has a stage"
+                  a <code>NOT NULL</code> guarantee.
+                </p>
+              </div>
+              <div>
+                <strong>We rejected</strong>
+                <p>
+                  <strong>A pg enum.</strong> Values can never be dropped,
+                  <code>ALTER TYPE … ADD VALUE</code> cannot run inside a transaction, and the
+                  ordering Day 9 needs would be locked in the type rather than queryable.
+                </p>
+                <p>
+                  <strong>Deriving the stage from history alone.</strong> A
+                  <code>DISTINCT ON</code> on every read — and an application with no transitions
+                  would have no stage at all.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <span class="kicker">Verified &amp; risk</span>
+            <h2>How we know it works</h2>
+            <span class="pill good">pnpm check ✓ 110 tests / 17 files</span>
+            <span class="pill good">pnpm build ✓ no DB env</span>
+            <span class="pill good">live Postgres 17 ✓</span>
+            <span class="pill good">review 3/3 APPROVED · 0 blockers</span>
+            <p>
+              Verified against a real container, not read: <code>DELETE FROM jobs</code> refused by
+              the FK; the extraction envelope CHECK rejects a malformed payload; RLS shows a
+              non-owner <strong>0</strong> candidate rows while the owner sees 60; the seed's re-run
+              guard exits 1; migrate is idempotent; the
+              <code>DEFERRABLE INITIALLY IMMEDIATE</code> unique survives a single-statement
+              position swap.
+            </p>
+            <span class="pill warn"
+              >watch: no live DB — run <code>db:migrate</code>/<code>db:seed</code> by hand</span
+            >
+            <span class="pill warn">watch: RLS on, zero policies — AI-43 needs owner creds</span>
+            <span class="pill warn">watch: 3 seed-realism follow-ups</span>
+          </div>
+        </div>
+
+        <div class="also">
+          <div class="card">
+            <strong>Per-field confidence as versioned <code>jsonb</code></strong>
+            <p>
+              An envelope <code>{ schemaVersion, model, extractedAt, fields }</code> guarded by
+              <em>both</em> a zod schema and a <code>jsonb_exists</code> CHECK.
+              <span class="no">Rejected:</span> per-field confidence columns — Day 17 will change
+              the shape.
+            </p>
+          </div>
+          <div class="card">
+            <strong><code>ON DELETE RESTRICT</code> on both application FKs</strong>
+            <p>
+              Deleting a job that has applications is refused, not cascaded — and the same for
+              candidates, which AC 6 does not even require.
+              <span class="no">Rejected:</span> cascade, and a "live applications only" rule a plain
+              FK cannot express.
+            </p>
+          </div>
+          <div class="card">
+            <strong><code>notes</code> attaches via <code>num_nonnulls(…) = 1</code></strong>
+            <p>
+              Three nullable FKs plus a check, so a note is bound to exactly one job, candidate or
+              application. <span class="no">Rejected:</span> a polymorphic
+              <code>entity_type</code>/<code>entity_id</code> pair, which has no referential
+              integrity at all.
+            </p>
+          </div>
+          <div class="card">
+            <strong>The seed ships <em>no</em> row-removing code path</strong>
+            <p>
+              It refuses on any populated target table and cannot empty one — not even behind a
+              flag. <span class="no">Rejected:</span> a guarded reset, because a guarded truncate
+              pointed at the hosted project is still a truncate.
+            </p>
+          </div>
+        </div>
+
+        <details class="evidence-trail">
+          <summary>How this change was built — the evidence trail</summary>
+          <div class="evidence-body">
+            <p class="lead" style="color: var(--muted); margin: 0 0 10px">
+              Spec → Plan → Work → Review → Release. Each stage left proof.
+            </p>
+            <div class="loop">
+              <div class="node">
+                <span class="num">01</span>
+                <div class="check">✓</div>
+                <strong>Spec</strong
+                ><small>Outcome, ACs, and every fact measured rather than recalled</small>
+                <div class="badge">🔍 909-line spec</div>
+              </div>
+              <div class="arrow">→</div>
+              <div class="node">
+                <span class="num">02</span>
+                <div class="check">✓</div>
+                <strong>Plan</strong
+                ><small>Eight slices, each with a DoD checkable with no database</small>
+                <div class="badge">✅ 8 slices + DoD</div>
+              </div>
+              <div class="arrow">→</div>
+              <div class="node">
+                <span class="num">03</span>
+                <div class="check">✓</div>
+                <strong>Work</strong><small>One slice per commit, tests alongside the schema</small>
+                <div class="badge">🧪 11 commits</div>
+              </div>
+            </div>
+            <div
+              class="loop"
+              style="grid-template-columns: repeat(3, 1fr); max-width: 560px; margin: 12px auto 0"
+            >
+              <div class="node">
+                <span class="num">04</span>
+                <div class="check">✓</div>
+                <strong>Review</strong
+                ><small>3 adversarial spec critiques before code, 3 code reviews after</small>
+                <div class="badge">🛡 3 × APPROVED</div>
+              </div>
+              <div class="arrow">→</div>
+              <div class="node">
+                <span class="num">05</span>
+                <div class="check">✓</div>
+                <strong>Release</strong><small>This artifact + the executed plan in plan.md</small>
+                <div class="badge">🏅 release proof</div>
+              </div>
+            </div>
+            <div class="payoffs">
+              <div><strong>Reduce drift</strong><span>Clear scope &amp; DoD.</span></div>
+              <div><strong>Raise quality</strong><span>TDD + review by default.</span></div>
+              <div><strong>Ship safely</strong><span>Proof, not memory.</span></div>
+              <div><strong>Repeat faster</strong><span>Trust the loop.</span></div>
+            </div>
+          </div>
+        </details>
+
+        <div class="mapgrid">
+          <nav class="rail" id="featureRail" aria-label="Features" role="listbox">
+            <button class="feature-btn" role="option" aria-selected="true" data-feature="0">
+              <strong>1. Tooling &amp; env plumbing</strong>
+              <small>Offline drizzle-kit, two DB keys · 2 fragments</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="1">
+              <strong>2. Stages, jobs, candidates</strong>
+              <small>The ordered lookup table · 2 fragments</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="2">
+              <strong>3. Applications &amp; transitions</strong>
+              <small>AC 2/3/4/6, the core · 4 fragments</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="3">
+              <strong>4. Interviews &amp; notes</strong>
+              <small>Exactly-one-parent check · 2 fragments</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="4">
+              <strong>5. Relations</strong>
+              <small>One module, cyclic FK graph · 1 fragment</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="5">
+              <strong>6. Migrations</strong>
+              <small>Generated DDL + hand-written SQL · 3 fragments</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="6">
+              <strong>7. Seed dataset</strong>
+              <small>90 applications, deterministic · 3 fragments</small>
+            </button>
+            <button class="feature-btn" role="option" aria-selected="false" data-feature="7">
+              <strong>8. Runners &amp; seed guard</strong>
+              <small>Insert-only, refuses on data · 2 fragments</small>
+            </button>
+          </nav>
+
+          <div class="feature-main">
+            <!-- FEATURE 1 — slice 1 -->
+            <div class="feature-panel active" id="feature-panel-0">
+              <div class="feature-summary">
+                <h2>Slice 1 — Tooling and env plumbing</h2>
+                <p>
+                  Adds drizzle-orm (dependency) plus drizzle-kit/drizzle-zod/postgres/tsx
+                  (devDependencies), a credential-less <code>drizzle.config.ts</code>, the five
+                  <code>db:*</code> scripts, and the two Postgres URLs. The whole ticket is
+                  verifiable offline because of what this slice does <em>not</em> configure.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="0"
+                  aria-label="Open fragment: drizzle.config.ts line 3, credential-less config"
+                >
+                  <div class="frag-head">
+                    <span class="mono">drizzle.config.ts:3</span>
+                    <span class="chip delta"
+                      ><span class="plus">+14</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    No <code>dbCredentials</code> at all, and a schema glob that excludes co-located
+                    tests — the two facts that make <code>generate</code>/<code>export</code>/<code
+                      >check</code
+                    >
+                    run with no database.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="1"
+                  aria-label="Open fragment: src/env.ts line 55, per-key lazy getters"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/env.ts:55</span>
+                    <span class="chip delta"
+                      ><span class="plus">+12</span> <span class="minus">−3</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    Splits the single server-schema getter into one lazy getter per key, so a
+                    required <code>DATABASE_URL</code> can no longer break an unrelated
+                    <code>env.NODE_ENV</code> read.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 2 — slice 2 -->
+            <div class="feature-panel" id="feature-panel-1">
+              <div class="feature-summary">
+                <h2>
+                  Slice 2 — Enums, <code>pipeline_stages</code>, <code>jobs</code>,
+                  <code>candidates</code>
+                </h2>
+                <p>
+                  The ordered stage lookup table plus the two root entities. Every table carries
+                  <code>.enableRLS()</code> and exports its <code>$inferSelect</code>/<code
+                    >$inferInsert</code
+                  >
+                  types — AC 5 has no hand-written row type anywhere in the change.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="2"
+                  aria-label="Open fragment: pipeline-stages.ts line 3, the seed constant"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/pipeline-stages.ts:3</span>
+                    <span class="chip delta"
+                      ><span class="plus">+17</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The seven stages as an <code>as const</code> array, with
+                    <code>PipelineStageKey</code> derived from it — one source of truth for the
+                    union, the seed and Day 9's ordering.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="3"
+                  aria-label="Open fragment: pipeline-stages.ts line 28, position uniqueness deliberately absent"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/pipeline-stages.ts:28</span>
+                    <span class="chip delta"
+                      ><span class="plus">+13</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The table itself — and a documented absence: <code>position</code> carries no
+                    <code>unique()</code> here, because drizzle cannot express
+                    <code>DEFERRABLE</code>.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 3 — slice 3 -->
+            <div class="feature-panel" id="feature-panel-2">
+              <div class="feature-summary">
+                <h2>
+                  Slice 3 — <code>applications</code> + <code>application_stage_transitions</code>
+                </h2>
+                <p>
+                  The core of the ticket: AC 2 (exactly one job and one candidate), AC 3
+                  (timestamped transitions), AC 4 (per-field confidence) and AC 6 (deletion refused,
+                  not cascaded) all land here, enforced by the database rather than by convention.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="4"
+                  aria-label="Open fragment: applications.ts line 32, RESTRICT foreign keys"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/applications.ts:32</span>
+                    <span class="chip delta"
+                      ><span class="plus">+25</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    Two <code>NOT NULL</code> scalar FKs with <code>ON DELETE RESTRICT</code>, plus
+                    <code>UNIQUE (job_id, candidate_id)</code>. AC 2 and AC 6 in fifteen lines of
+                    schema.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="5"
+                  aria-label="Open fragment: applications.ts line 39, extraction envelope check"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/applications.ts:39</span>
+                    <span class="chip delta"
+                      ><span class="plus">+11</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The <code>jsonb</code> extraction column, its envelope CHECK built from
+                    <code>jsonb_exists</code> (not the <code>?</code> operator), and the GIN index
+                    Day 18 will read.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="6"
+                  aria-label="Open fragment: extraction.ts line 14, the zod envelope schema"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/extraction.ts:14</span>
+                    <span class="chip delta"
+                      ><span class="plus">+14</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The application-side half of the same guard: a zod schema pinned to
+                    <code>schemaVersion: 1</code>, with confidence bounded to 0–1.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="7"
+                  aria-label="Open fragment: application-stage-transitions.ts line 19, the history table"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/application-stage-transitions.ts:19</span>
+                    <span class="chip delta"
+                      ><span class="plus">+11</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    Every stage move with an <code>occurred_at</code>, a nullable
+                    <code>from_stage</code> for the first hop, and a check that a transition never
+                    points at itself.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 4 — slice 4 -->
+            <div class="feature-panel" id="feature-panel-3">
+              <div class="feature-summary">
+                <h2>Slice 4 — <code>interviews</code> + <code>notes</code></h2>
+                <p>
+                  The two free-text tables Day 13's RAG corpus is built from. <code>notes</code> is
+                  the one place a polymorphic column was seriously tempting, and the one place it
+                  was refused.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="8"
+                  aria-label="Open fragment: notes.ts line 28, num_nonnulls check"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/notes.ts:28</span>
+                    <span class="chip delta"
+                      ><span class="plus">+12</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    Three nullable FKs and <code>num_nonnulls(…) = 1</code>: exactly one parent,
+                    enforced by Postgres, with real referential integrity on all three.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="9"
+                  aria-label="Open fragment: interviews.ts line 26, interview loop"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/interviews.ts:26</span>
+                    <span class="chip delta"
+                      ><span class="plus">+11</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    One row per round, hung off the <em>application</em> rather than the candidate,
+                    with <code>duration_minutes &gt; 0</code> checked.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 5 — slice 5 -->
+            <div class="feature-panel" id="feature-panel-4">
+              <div class="feature-summary">
+                <h2>Slice 5 — Relations</h2>
+                <p>
+                  Roughly thirty declarative lines with no runtime cost, so AI-43 and AI-63 write
+                  typed <code>with: {…}</code> queries instead of hand-rolled joins. Their
+                  <em>location</em> is the decision, not their existence.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="10"
+                  aria-label="Open fragment: relations.ts line 18, one module for a cyclic graph"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/schema/relations.ts:18</span>
+                    <span class="chip delta"
+                      ><span class="plus">+17</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    All relations in one module: <code>relations()</code> needs the referenced table
+                    as a value at import time, and the FK graph is not a DAG.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 6 — slice 6 -->
+            <div class="feature-panel" id="feature-panel-5">
+              <div class="feature-summary">
+                <h2>Slice 6 — Migrations</h2>
+                <p>
+                  <code>0000</code> is generated DDL — this slice edits no schema file.
+                  <code>0001</code> is hand-written and carries exactly what drizzle cannot express:
+                  reference rows, a deferrable constraint, and <code>updated_at</code> maintenance.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="11"
+                  aria-label="Open fragment: 0000 migration line 114, generated RESTRICT and RLS"
+                >
+                  <div class="frag-head">
+                    <span class="mono">drizzle/0000_loud_morg.sql:114</span>
+                    <span class="chip delta"
+                      ><span class="plus">+5</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The generated proof: <code>ON DELETE restrict</code> on both application FKs,
+                    <code>ENABLE ROW LEVEL SECURITY</code> per table, and the GIN index on
+                    <code>extraction</code>.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="12"
+                  aria-label="Open fragment: 0001 migration line 7, stage rows and deferrable unique"
+                >
+                  <div class="frag-head">
+                    <span class="mono">drizzle/0001_pipeline-stages-seed-and-triggers.sql:7</span>
+                    <span class="chip delta"
+                      ><span class="plus">+16</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The seven stage rows (idempotent via <code>ON CONFLICT</code>) and the
+                    <code>DEFERRABLE INITIALLY IMMEDIATE</code> unique that makes a one-statement
+                    reorder possible.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="13"
+                  aria-label="Open fragment: 0001 migration line 25, set_updated_at trigger function"
+                >
+                  <div class="frag-head">
+                    <span class="mono">drizzle/0001_pipeline-stages-seed-and-triggers.sql:25</span>
+                    <span class="chip delta"
+                      ><span class="plus">+16</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    <code>set_updated_at()</code> with a pinned empty <code>search_path</code>, plus
+                    one <code>BEFORE UPDATE</code> trigger per table that has the column.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 7 — slice 7 -->
+            <div class="feature-panel" id="feature-panel-6">
+              <div class="feature-summary">
+                <h2>Slice 7 — The seed dataset</h2>
+                <p>
+                  8 jobs, 60 candidates, 90 applications, 293 transitions, 40 interviews, 120 notes,
+                  12 extraction payloads and ~73k characters of hand-authored prose — pure,
+                  deterministic, and no <code>faker</code>, because the corpus is the point of the
+                  free-text columns.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="14"
+                  aria-label="Open fragment: seed-data.ts line 488, buildSeedDataset signature"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/seed-data.ts:488</span>
+                    <span class="chip delta"
+                      ><span class="plus">+12</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    <code>now</code> is a required parameter with no default, so the runner passes
+                    the real clock while tests pin an instant — recency and determinism at once.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="15"
+                  aria-label="Open fragment: seed-data.ts line 117, reserved email domain"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/seed-data.ts:117</span>
+                    <span class="chip delta"
+                      ><span class="plus">+18</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    Review round 2's find: sixty invented candidates held addresses at real mail
+                    providers. Now an RFC 2606 <code>.example</code> domain, matching what phone and
+                    resume URLs already did.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="16"
+                  aria-label="Open fragment: seed-data.ts line 378, interview clamped to terminal transition"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/seed-data.ts:378</span>
+                    <span class="chip delta"
+                      ><span class="plus">+14</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    Review round 1's find: a rejection could predate the interview that justified
+                    it. An interview can no longer be dated after its application went terminal.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- FEATURE 8 — slice 8 -->
+            <div class="feature-panel" id="feature-panel-7">
+              <div class="feature-summary">
+                <h2>Slice 8 — Runners, seed guard and docs</h2>
+                <p>
+                  Both runners connect over <code>DIRECT_DATABASE_URL</code> — Supabase's
+                  transaction pooler breaks DDL and the migrator's advisory locks — and both
+                  short-circuit on <code>--dry-run</code> before importing <code>@/env</code> or
+                  <code>postgres</code>.
+                </p>
+              </div>
+              <div class="fragments">
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="17"
+                  aria-label="Open fragment: seed-preflight.ts line 21, the empty-target guard"
+                >
+                  <div class="frag-head">
+                    <span class="mono">src/lib/db/seed-preflight.ts:21</span>
+                    <span class="chip delta"
+                      ><span class="plus">+16</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    A pure, connection-free guard that refuses on any populated target table — and,
+                    deliberately, has no counterpart that empties one.
+                  </p>
+                </button>
+                <button
+                  class="fragment-card"
+                  type="button"
+                  data-global="18"
+                  aria-label="Open fragment: db-seed.ts line 52, dry-run short-circuit and insert-only transaction"
+                >
+                  <div class="frag-head">
+                    <span class="mono">scripts/db-seed.ts:52</span>
+                    <span class="chip delta"
+                      ><span class="plus">+21</span> <span class="minus">−0</span></span
+                    >
+                  </div>
+                  <p class="frag-desc">
+                    The dry-run returns before any database import exists, and the transaction below
+                    it contains six inserts and nothing else — no verb here can remove a row.
+                  </p>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════ LEVEL 1 — FRAGMENT ══════════════ -->
+      <section id="view-fragment" class="view" aria-hidden="true">
+        <div class="frag-header">
+          <button class="nbtn" id="zoomOutBtn">⤺ Zoom out</button>
+          <div class="titles">
+            <span class="mono" id="fragTitle" tabindex="-1"></span>
+            <span class="feature-tag" id="fragFeature"></span>
+          </div>
+          <span class="count" id="fragPos"></span>
+        </div>
+
+        <!-- fragment 0 — drizzle.config.ts -->
+        <div class="frag-detail active" data-global="0">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A new root-level <code>drizzle.config.ts</code> that
+              declares a dialect, a schema glob and an output folder — and nothing else.
+            </p>
+            <p>
+              <strong>Why.</strong> Two deliberate omissions carry the whole offline plan. No
+              <code>dbCredentials</code>, because <code>generate</code>, <code>export</code> and
+              <code>check</code> never open a connection — measured, with
+              <code>DATABASE_URL</code> unset. And the extglob <code>!(*.test).ts</code>, because
+              drizzle-kit <code>require()</code>s every matched file; a plain <code>*.ts</code> glob
+              pulled in a co-located test whose top-level <code>vitest</code> import made
+              drizzle-kit emit no SQL at all <em>while still exiting 0</em>.
+            </p>
+            <p>
+              <strong>What to check.</strong> The config imports nothing through <code>@/</code> —
+              drizzle-kit compiles it with esbuild and plain <code>require</code>, which does not
+              resolve tsconfig paths. Consequence of the omission: <code>drizzle-kit migrate</code>,
+              <code>push</code> and <code>studio</code> do not work as-is; migrations run through
+              <code>scripts/db-migrate.ts</code> instead.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">3</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">4</span><span class="gutter">+</span>
+              <pre class="code">
+ * drizzle-kit deliberately declares no `dbCredentials`: `generate`, `export` and `check` never</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">5</span><span class="gutter">+</span>
+              <pre class="code">
+ * open a connection, which keeps this ticket's DoD checkable offline (see</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">6</span><span class="gutter">+</span>
+              <pre class="code">
+ * docs/specs/ai-34-domain-model.md §2). drizzle-kit compiles this file with esbuild + `require`,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">7</span><span class="gutter">+</span>
+              <pre class="code">
+ * which does not resolve tsconfig `paths` — it must not import through `@/`.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">8</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">9</span><span class="gutter">+</span>
+              <pre class="code">export default defineConfig({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">10</span><span class="gutter">+</span>
+              <pre class="code">  dialect: "postgresql",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">11</span><span class="gutter">+</span>
+              <pre class="code">
+  // The extglob excludes co-located `*.test.ts` files: a plain `*.ts` glob matches them too,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">12</span><span class="gutter">+</span>
+              <pre class="code">
+  // and drizzle-kit `require`s every matched file, which fails on a test file's top-level</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">13</span><span class="gutter">+</span>
+              <pre class="code">
+  // `vitest` import (measured: "Vitest cannot be imported ... using require()").</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">14</span><span class="gutter">+</span>
+              <pre class="code">  schema: "./src/lib/db/schema/!(*.test).ts",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">15</span><span class="gutter">+</span>
+              <pre class="code">  out: "./drizzle",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">16</span><span class="gutter">+</span>
+              <pre class="code">});</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 1 — src/env.ts -->
+        <div class="frag-detail" data-global="1">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> The single lazy getter that parsed the whole
+              <code>serverSchema</code> becomes one getter per key, each parsing only its own
+              <code>.pick()</code> slice. <code>DATABASE_URL</code> and
+              <code>DIRECT_DATABASE_URL</code> join the schema and <code>.env.example</code>;
+              validation failures now throw a named <code>EnvValidationError</code>.
+            </p>
+            <p>
+              <strong>Why.</strong> Not cosmetic. With the old single getter, adding a
+              <em>required</em> <code>DATABASE_URL</code> would have made
+              <code>env.NODE_ENV</code> throw everywhere the URL is absent — including the existing
+              status-route test, and including <code>pnpm build</code>, which runs with no database
+              env at all.
+            </p>
+            <p>
+              <strong>What to check.</strong> <code>src/env.ts</code> is still the only module
+              reading <code>process.env</code>. Each key's schema is written out inline rather than
+              through a shared constant, because <code>check-env.sh</code> finds validated keys by
+              matching <code>KEY: z.</code> at the start of a line. Two keys, not one: Supabase's
+              transaction pooler breaks DDL and the migrator's advisory locks.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line ctx">
+              <span class="ln">55</span><span class="gutter"> </span>
+              <pre class="code">const client = parse(clientSchema, clientRuntime, "client");</pre>
+            </div>
+            <div class="diff-line ctx">
+              <span class="ln">56</span><span class="gutter"> </span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line del">
+              <span class="ln">39</span><span class="gutter">−</span>
+              <pre class="code">
+// On the client, `process.env` only contains the inlined NEXT_PUBLIC_ values, so</pre>
+            </div>
+            <div class="diff-line del">
+              <span class="ln">40</span><span class="gutter">−</span>
+              <pre class="code">
+// the server schema is parsed lazily and only where it is actually reachable.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">57</span><span class="gutter">+</span>
+              <pre class="code">
+// On the client, `process.env` only contains the inlined NEXT_PUBLIC_ values, so the server</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">58</span><span class="gutter">+</span>
+              <pre class="code">
+// schema is parsed lazily. Each server key gets its own getter — parsing only that key's slice</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">59</span><span class="gutter">+</span>
+              <pre class="code">
+// of `serverSchema` via `.pick()` — so reading one key never fails because a sibling key (e.g.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">60</span><span class="gutter">+</span>
+              <pre class="code">// an unset DATABASE_URL) is invalid or missing.</pre>
+            </div>
+            <div class="diff-line ctx">
+              <span class="ln">61</span><span class="gutter"> </span>
+              <pre class="code">export const env = {</pre>
+            </div>
+            <div class="diff-line ctx">
+              <span class="ln">62</span><span class="gutter"> </span>
+              <pre class="code">  ...client,</pre>
+            </div>
+            <div class="diff-line ctx">
+              <span class="ln">63</span><span class="gutter"> </span>
+              <pre class="code">  get NODE_ENV() {</pre>
+            </div>
+            <div class="diff-line del">
+              <span class="ln">44</span><span class="gutter">−</span>
+              <pre class="code">
+    return parse(serverSchema, process.env, "server").NODE_ENV;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">64</span><span class="gutter">+</span>
+              <pre class="code">
+    return parse(serverSchema.pick({ NODE_ENV: true }), process.env, "server").NODE_ENV;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">65</span><span class="gutter">+</span>
+              <pre class="code">  },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">66</span><span class="gutter">+</span>
+              <pre class="code">  get DATABASE_URL() {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">67</span><span class="gutter">+</span>
+              <pre class="code">
+    return parse(serverSchema.pick({ DATABASE_URL: true }), process.env, "server").DATABASE_URL;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">68</span><span class="gutter">+</span>
+              <pre class="code">  },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">69</span><span class="gutter">+</span>
+              <pre class="code">  get DIRECT_DATABASE_URL() {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">70</span><span class="gutter">+</span>
+              <pre class="code">
+    return parse(serverSchema.pick({ DIRECT_DATABASE_URL: true }), process.env, "server")</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">71</span><span class="gutter">+</span>
+              <pre class="code">      .DIRECT_DATABASE_URL;</pre>
+            </div>
+            <div class="diff-line ctx">
+              <span class="ln">72</span><span class="gutter"> </span>
+              <pre class="code">  },</pre>
+            </div>
+            <div class="diff-line ctx">
+              <span class="ln">73</span><span class="gutter"> </span>
+              <pre class="code">};</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 2 — pipeline-stages.ts seed constant -->
+        <div class="frag-detail" data-global="2">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A new <code>PIPELINE_STAGE_SEED</code>
+              <code>as const</code> array holding all seven stages with their <code>label</code>,
+              <code>position</code> and <code>isTerminal</code>, and the
+              <code>PipelineStageKey</code> union derived from it.
+            </p>
+            <p>
+              <strong>Why.</strong> This is the single value the TypeScript union, the seed's funnel
+              invariant, and the hand-written migration's <code>INSERT</code> all read. A pg enum
+              could have carried the keys, but not <code>position</code> or <code>label</code> — and
+              Day 9's funnel chart sorts on <code>position</code>, while a recruiter renaming
+              "Screening" must not require an <code>ALTER TYPE</code>.
+            </p>
+            <p>
+              <strong>What to check.</strong> The doc comment says it out loud: reordering this
+              array has no effect on the database. The migration is the only place these values
+              exist as SQL, so <code>migrations.test.ts</code> asserts every <em>field</em> of every
+              row appears in the migration's insert for that key — not just the key, which would let
+              a wrong <code>position</code> pass.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">3</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">4</span><span class="gutter">+</span>
+              <pre class="code">
+ * The ordered set of pipeline stages, seeded by the custom migration (slice 6) and the</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">5</span><span class="gutter">+</span>
+              <pre class="code">
+ * single source of truth `PipelineStageKey` is derived from. Reordering this list has no</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">6</span><span class="gutter">+</span>
+              <pre class="code">
+ * effect on the database — it only exists once as SQL, written by hand from these values.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">7</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">8</span><span class="gutter">+</span>
+              <pre class="code">export const PIPELINE_STAGE_SEED = [</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">9</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "applied", label: "Applied", position: 1, isTerminal: false },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">10</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "screening", label: "Screening", position: 2, isTerminal: false },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">11</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "interview", label: "Interview", position: 3, isTerminal: false },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">12</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "offer", label: "Offer", position: 4, isTerminal: false },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">13</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "hired", label: "Hired", position: 5, isTerminal: true },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">14</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "rejected", label: "Rejected", position: 6, isTerminal: true },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">15</span><span class="gutter">+</span>
+              <pre class="code">
+  { key: "withdrawn", label: "Withdrawn", position: 7, isTerminal: true },</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">16</span><span class="gutter">+</span>
+              <pre class="code">] as const;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">17</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">18</span><span class="gutter">+</span>
+              <pre class="code">
+/** A pipeline stage's stable machine identifier, derived from `PIPELINE_STAGE_SEED`. */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">19</span><span class="gutter">+</span>
+              <pre class="code">
+export type PipelineStageKey = (typeof PIPELINE_STAGE_SEED)[number]["key"];</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 3 — pipeline-stages.ts table -->
+        <div class="frag-detail" data-global="3">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> The <code>pipeline_stages</code> table:
+              <code>key</code> as the primary key (so <code>applications.stage</code> is a readable
+              text FK), plus <code>label</code>, <code>position</code>, <code>is_terminal</code>,
+              and <code>.enableRLS()</code>.
+            </p>
+            <p>
+              <strong>Why.</strong> The interesting part is what is <em>absent</em>.
+              <code>position</code> carries no <code>unique()</code>, because drizzle-orm 0.45.2's
+              <code>unique()</code> exposes only <code>nullsNotDistinct()</code> — there is no
+              <code>DEFERRABLE</code> option — and a non-deferrable unique would fail mid-statement
+              on the single most obvious reorder, one <code>UPDATE</code> swapping two positions
+              with a <code>CASE</code>. The constraint moves to the hand-written migration instead.
+            </p>
+            <p>
+              <strong>What to check.</strong> Slice 2's test asserts
+              <code>getTableConfig(pipelineStages).uniqueConstraints</code> contains
+              <em>no</em> entry for <code>position</code>, so drizzle can never start emitting a
+              second, non-deferrable one alongside the migration's. Verified live: the constraint is
+              <code>condeferrable=t, condeferred=f</code>, and the one-statement swap succeeds.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">28</span><span class="gutter">+</span>
+              <pre class="code">
+ * `position` uniqueness is deliberately not declared here: a plain unique constraint</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">29</span><span class="gutter">+</span>
+              <pre class="code">
+ * cannot be deferred, so swapping two stages' positions in one `UPDATE` would fail</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">30</span><span class="gutter">+</span>
+              <pre class="code">
+ * mid-statement. That constraint is instead written by hand, as `DEFERRABLE INITIALLY</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">31</span><span class="gutter">+</span>
+              <pre class="code"> * IMMEDIATE`, in slice 6's custom migration.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">32</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">33</span><span class="gutter">+</span>
+              <pre class="code">export const pipelineStages = pgTable("pipeline_stages", {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">34</span><span class="gutter">+</span>
+              <pre class="code">  key: text("key").primaryKey(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">35</span><span class="gutter">+</span>
+              <pre class="code">  label: text("label").notNull(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">36</span><span class="gutter">+</span>
+              <pre class="code">  position: integer("position").notNull(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">37</span><span class="gutter">+</span>
+              <pre class="code">  isTerminal: boolean("is_terminal").notNull().default(false),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">38</span><span class="gutter">+</span>
+              <pre class="code">
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">39</span><span class="gutter">+</span>
+              <pre class="code">
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">40</span><span class="gutter">+</span>
+              <pre class="code">}).enableRLS();</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 4 — applications.ts RESTRICT FKs -->
+        <div class="frag-detail" data-global="4">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> <code>applications</code> gains two
+              <code>NOT NULL</code> scalar foreign keys — <code>job_id</code> and
+              <code>candidate_id</code> — both <code>ON DELETE RESTRICT ON UPDATE CASCADE</code>,
+              plus <code>UNIQUE (job_id, candidate_id)</code> and a third <code>RESTRICT</code> FK
+              from <code>stage</code> into <code>pipeline_stages(key)</code>.
+            </p>
+            <p>
+              <strong>Why.</strong> AC 2 asks for "exactly one job and one candidate, enforced by
+              the schema rather than by convention" — that is these two columns being
+              <code>NOT NULL</code> scalars rather than a nullable pair or a polymorphic
+              <code>entity_type</code>/<code>entity_id</code>. AC 6 asks that deleting a job with
+              applications be refused rather than cascading silently: <code>RESTRICT</code>, and it
+              is applied to <code>candidate_id</code> too, which AC 6 does not require — removing a
+              person's record should also require clearing their applications first.
+            </p>
+            <p>
+              <strong>What to check.</strong> The unique pair means one row per person per role; a
+              re-application moves the existing row and appends a transition. Note that the rule is
+              stricter than the AC: deletion is refused when <em>any</em> application exists, not
+              only a live one, because a plain FK cannot tell them apart.
+              <code>status = 'closed'</code> is the intended way to retire a job. Verified live:
+              <code>DELETE FROM jobs</code> raises
+              <code>violates foreign key constraint "applications_job_id_fk"</code>, and a duplicate
+              pair is rejected.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">32</span><span class="gutter">+</span>
+              <pre class="code">    jobId: uuid("job_id").notNull(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">33</span><span class="gutter">+</span>
+              <pre class="code">    candidateId: uuid("candidate_id").notNull(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">34</span><span class="gutter">+</span>
+              <pre class="code">
+    stage: text("stage").notNull().$type&lt;PipelineStageKey&gt;(),</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ columns 35–42 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">43</span><span class="gutter">+</span>
+              <pre class="code">  (t) =&gt; [</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">44</span><span class="gutter">+</span>
+              <pre class="code">    foreignKey({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">45</span><span class="gutter">+</span>
+              <pre class="code">      name: "applications_job_id_fk",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">46</span><span class="gutter">+</span>
+              <pre class="code">      columns: [t.jobId],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">47</span><span class="gutter">+</span>
+              <pre class="code">      foreignColumns: [jobs.id],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">48</span><span class="gutter">+</span>
+              <pre class="code">    })</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">49</span><span class="gutter">+</span>
+              <pre class="code">      .onDelete("restrict")</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">50</span><span class="gutter">+</span>
+              <pre class="code">      .onUpdate("cascade"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">51</span><span class="gutter">+</span>
+              <pre class="code">    foreignKey({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">52</span><span class="gutter">+</span>
+              <pre class="code">      name: "applications_candidate_id_fk",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">53</span><span class="gutter">+</span>
+              <pre class="code">      columns: [t.candidateId],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">54</span><span class="gutter">+</span>
+              <pre class="code">      foreignColumns: [candidates.id],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">55</span><span class="gutter">+</span>
+              <pre class="code">    })</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">56</span><span class="gutter">+</span>
+              <pre class="code">      .onDelete("restrict")</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">57</span><span class="gutter">+</span>
+              <pre class="code">      .onUpdate("cascade"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">58</span><span class="gutter">+</span>
+              <pre class="code">    foreignKey({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">59</span><span class="gutter">+</span>
+              <pre class="code">      name: "applications_stage_fk",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">60</span><span class="gutter">+</span>
+              <pre class="code">      columns: [t.stage],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">61</span><span class="gutter">+</span>
+              <pre class="code">      foreignColumns: [pipelineStages.key],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">62</span><span class="gutter">+</span>
+              <pre class="code">    })</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">63</span><span class="gutter">+</span>
+              <pre class="code">      .onDelete("restrict")</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">64</span><span class="gutter">+</span>
+              <pre class="code">      .onUpdate("cascade"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">65</span><span class="gutter">+</span>
+              <pre class="code">
+    unique("applications_job_id_candidate_id_key").on(t.jobId, t.candidateId),</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 5 — applications.ts extraction envelope -->
+        <div class="frag-detail" data-global="5">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A <code>jsonb</code> <code>extraction</code> column
+              typed as <code>ExtractionPayload</code>, a named CHECK constraint that enforces the
+              envelope's shape in the database, and a GIN index over the column.
+            </p>
+            <p>
+              <strong>Why.</strong> AC 4 wants rows that "can carry per-field confidence, which Day
+              17 writes and Day 18 gates on". Per-field confidence <em>columns</em> would have to be
+              redesigned every time the prompt changes; a versioned envelope makes that a version
+              bump. The guard is deliberately doubled: <code>extractionPayloadSchema</code> on the
+              application side and this CHECK on the database side, because Day 5's LLM-written SQL
+              and Day 17's writes do not both go through the same code path.
+            </p>
+            <p>
+              <strong>What to check.</strong> The check uses <code>jsonb_exists(…)</code> rather
+              than the <code>?</code> operator on purpose — <code>?</code> collides with parameter
+              placeholders in several clients and query tools. The GIN index is not speculative: the
+              seed ships 12 populated payloads, so the index and the check both have rows that
+              exercise them. Verified live: <code>update … extraction='{"nope":1}'</code> raises
+              <code>violates check constraint "applications_extraction_envelope_check"</code>.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">39</span><span class="gutter">+</span>
+              <pre class="code">
+    extraction: jsonb("extraction").$type&lt;ExtractionPayload&gt;(),</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ columns and foreign keys 40–65 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">66</span><span class="gutter">+</span>
+              <pre class="code">    check(</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">67</span><span class="gutter">+</span>
+              <pre class="code">      "applications_extraction_envelope_check",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">68</span><span class="gutter">+</span>
+              <pre class="code">
+      sql`${t.extraction} IS NULL OR (jsonb_typeof(${t.extraction}) = 'object' AND jsonb_exists(${t.extraction}, 'schemaVersion') AND jsonb_exists(${t.extraction}, 'fields'))`,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">69</span><span class="gutter">+</span>
+              <pre class="code">    ),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">70</span><span class="gutter">+</span>
+              <pre class="code">    index("applications_candidate_id_idx").on(t.candidateId),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">71</span><span class="gutter">+</span>
+              <pre class="code">    index("applications_stage_idx").on(t.stage),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">72</span><span class="gutter">+</span>
+              <pre class="code">    index("applications_applied_at_idx").on(t.appliedAt),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">73</span><span class="gutter">+</span>
+              <pre class="code">
+    index("applications_extraction_gin_idx").using("gin", t.extraction),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">74</span><span class="gutter">+</span>
+              <pre class="code">  ],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">75</span><span class="gutter">+</span>
+              <pre class="code">).enableRLS();</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 6 — extraction.ts -->
+        <div class="frag-detail" data-global="6">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A new framework-free module holding
+              <code>extractionPayloadSchema</code> — the zod shape of what goes into
+              <code>applications.extraction</code> — plus the <code>ExtractionPayload</code> and
+              <code>ExtractionField</code> types inferred from it.
+            </p>
+            <p>
+              <strong>Why.</strong> Each field carries <code>value</code>,
+              <code>confidence</code> (bounded to 0–1) and <code>source</code>, including for fields
+              a reviewer later rejects — which a typed domain column cannot express.
+              <code>schemaVersion</code> is a <code>z.literal(1)</code> rather than a number so that
+              a future prompt change becomes a version bump this schema loudly rejects, not a silent
+              shape drift no reader notices.
+            </p>
+            <p>
+              <strong>What to check.</strong> No hand-maintained parallel type: the exported types
+              are <code>z.infer</code> of the schema, and <code>applications.extraction</code> is
+              narrowed with <code>.$type&lt;ExtractionPayload&gt;()</code>, so the column and the
+              validator cannot disagree. Tests reject <code>confidence: 1.4</code>, a missing
+              <code>fields</code>, and a wrong <code>schemaVersion</code>.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">14</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">15</span><span class="gutter">+</span>
+              <pre class="code">
+ * The envelope stored in `applications.extraction`: what AI-107 writes and AI-112 gates on.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">16</span><span class="gutter">+</span>
+              <pre class="code">
+ * `schemaVersion` is pinned to the current shape so a future prompt change becomes a version</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">17</span><span class="gutter">+</span>
+              <pre class="code">
+ * bump this schema will reject, rather than a silent shape drift no reader would notice.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">18</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">19</span><span class="gutter">+</span>
+              <pre class="code">export const extractionPayloadSchema = z.object({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">20</span><span class="gutter">+</span>
+              <pre class="code">  schemaVersion: z.literal(1),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">21</span><span class="gutter">+</span>
+              <pre class="code">  model: z.string(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">22</span><span class="gutter">+</span>
+              <pre class="code">  extractedAt: z.iso.datetime(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">23</span><span class="gutter">+</span>
+              <pre class="code">  fields: z.record(z.string(), extractionFieldSchema),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">24</span><span class="gutter">+</span>
+              <pre class="code">});</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">25</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">26</span><span class="gutter">+</span>
+              <pre class="code">
+/** The typed shape of `applications.extraction`, inferred from {@link extractionPayloadSchema}. */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">27</span><span class="gutter">+</span>
+              <pre class="code">
+export type ExtractionPayload = z.infer&lt;typeof extractionPayloadSchema&gt;;</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 7 — application_stage_transitions -->
+        <div class="frag-detail" data-global="7">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A seventh table recording one row per stage move —
+              <code>from_stage</code> (nullable, for the first hop), <code>to_stage</code>,
+              <code>occurred_at</code>, <code>changed_by</code>, <code>reason</code> — with a check
+              that a transition never points at itself and a composite index on
+              <code>(application_id, occurred_at)</code>.
+            </p>
+            <p>
+              <strong>Why.</strong> AC 3 — "stage transitions are recorded with a timestamp, so
+              time-in-stage is derivable" — cannot be met by a <code>stage_changed_at</code> column
+              alone, which loses every earlier stage's duration. The table is not scope creep; it is
+              the AC. <code>applications.stage</code> projects the latest row here rather than
+              competing with it, which is what keeps every dashboard query single-table.
+            </p>
+            <p>
+              <strong>What to check.</strong> <code>ON DELETE CASCADE</code> on
+              <code>application_id</code> looks inconsistent next to <code>applications</code>'
+              <code>RESTRICT</code> — it is safe precisely because of it: no job or candidate
+              deletion can ever reach these rows. The drift risk (a writer updating
+              <code>applications.stage</code> outside the single write path) is a recorded land-mine
+              for AI-112, mitigated today by there being no writer. Verified live: 293 transitions,
+              chained, and the <code>lead()</code> time-in-stage query returns 0 mismatches against
+              <code>applications.stage</code>.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">19</span><span class="gutter">+</span>
+              <pre class="code">
+    fromStage: text("from_stage").$type&lt;PipelineStageKey&gt;(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">20</span><span class="gutter">+</span>
+              <pre class="code">
+    toStage: text("to_stage").notNull().$type&lt;PipelineStageKey&gt;(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">21</span><span class="gutter">+</span>
+              <pre class="code">
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ columns and foreign keys 22–45 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">46</span><span class="gutter">+</span>
+              <pre class="code">    check(</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">47</span><span class="gutter">+</span>
+              <pre class="code">      "application_stage_transitions_from_to_distinct_check",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">48</span><span class="gutter">+</span>
+              <pre class="code">
+      sql`${t.fromStage} IS NULL OR ${t.fromStage} &lt;&gt; ${t.toStage}`,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">49</span><span class="gutter">+</span>
+              <pre class="code">    ),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">50</span><span class="gutter">+</span>
+              <pre class="code">
+    index("application_stage_transitions_application_id_occurred_at_idx").on(</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">51</span><span class="gutter">+</span>
+              <pre class="code">      t.applicationId,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">52</span><span class="gutter">+</span>
+              <pre class="code">      t.occurredAt,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">53</span><span class="gutter">+</span>
+              <pre class="code">    ),</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 8 — notes.ts num_nonnulls -->
+        <div class="frag-detail" data-global="8">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> <code>notes</code> gets three nullable foreign keys —
+              <code>job_id</code>, <code>candidate_id</code>, <code>application_id</code> — each
+              <code>ON DELETE CASCADE</code>, and a check constraint
+              <code>num_nonnulls(job_id, candidate_id, application_id) = 1</code>.
+            </p>
+            <p>
+              <strong>Why.</strong> The obvious alternative was a polymorphic
+              <code>entity_type</code>/<code>entity_id</code> pair, which extends to a fourth
+              attachable entity for free. It also has <em>no referential integrity at all</em>:
+              nothing stops a note pointing at an id that never existed, and nothing cleans it up
+              when the parent goes. At three attachable entities, real FKs plus one check win — and
+              "attached to exactly one thing" becomes schema-enforced rather than an application
+              invariant.
+            </p>
+            <p>
+              <strong>What to check.</strong> <code>CASCADE</code> here, unlike
+              <code>applications</code>' <code>RESTRICT</code>: a note about a removed parent is
+              noise, not lost history. The three partial-ish indexes exist because every read path
+              filters on exactly one of the columns. Verified in the generated DDL:
+              <code>CONSTRAINT "notes_exactly_one_parent_check" CHECK (num_nonnulls(…) = 1)</code>.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">28</span><span class="gutter">+</span>
+              <pre class="code">    jobId: uuid("job_id"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">29</span><span class="gutter">+</span>
+              <pre class="code">    candidateId: uuid("candidate_id"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">30</span><span class="gutter">+</span>
+              <pre class="code">    applicationId: uuid("application_id"),</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ columns 31–37 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">38</span><span class="gutter">+</span>
+              <pre class="code">    foreignKey({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">39</span><span class="gutter">+</span>
+              <pre class="code">      name: "notes_job_id_fk",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">40</span><span class="gutter">+</span>
+              <pre class="code">      columns: [t.jobId],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">41</span><span class="gutter">+</span>
+              <pre class="code">      foreignColumns: [jobs.id],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">42</span><span class="gutter">+</span>
+              <pre class="code">    }).onDelete("cascade"),</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ two further cascade foreign keys 43–52 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">53</span><span class="gutter">+</span>
+              <pre class="code">    check(</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">54</span><span class="gutter">+</span>
+              <pre class="code">      "notes_exactly_one_parent_check",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">55</span><span class="gutter">+</span>
+              <pre class="code">
+      sql`num_nonnulls(${t.jobId}, ${t.candidateId}, ${t.applicationId}) = 1`,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">56</span><span class="gutter">+</span>
+              <pre class="code">    ),</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 9 — interviews.ts -->
+        <div class="frag-detail" data-global="9">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> <code>interviews</code>: one row per round with a
+              <code>kind</code>, a <code>status</code>, <code>scheduled_at</code>, a duration, an
+              interviewer, a recommendation and free-text <code>feedback</code> — plus a
+              <code>duration_minutes &gt; 0</code> check and a
+              <code>(application_id, scheduled_at)</code> index.
+            </p>
+            <p>
+              <strong>Why.</strong> It hangs off the <em>application</em>, not the candidate: the
+              same person interviewing for two roles has two independent loops, and a
+              candidate-level table would merge them. The <code>feedback</code> column is one of the
+              four free-text columns Day 13's RAG corpus is built from, which is why the seed
+              hand-authors it rather than generating lorem.
+            </p>
+            <p>
+              <strong>What to check.</strong> Coherence between an interview and its application's
+              stage history is enforced in the seed, not the schema — a schema-level version needs a
+              trigger or a cross-table check, which is more machinery than the realism is worth.
+              Known gap carried as a follow-up: interview distribution leaves 5 of 12 hires with no
+              interview on file.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">26</span><span class="gutter">+</span>
+              <pre class="code">    kind: interviewKind("kind").notNull(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">27</span><span class="gutter">+</span>
+              <pre class="code">
+    status: interviewStatus("status").notNull().default("scheduled"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">28</span><span class="gutter">+</span>
+              <pre class="code">
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">29</span><span class="gutter">+</span>
+              <pre class="code">
+    durationMinutes: integer("duration_minutes").notNull().default(45),</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ columns 30–37 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">38</span><span class="gutter">+</span>
+              <pre class="code">    foreignKey({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">39</span><span class="gutter">+</span>
+              <pre class="code">      name: "interviews_application_id_fk",</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">40</span><span class="gutter">+</span>
+              <pre class="code">      columns: [t.applicationId],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">41</span><span class="gutter">+</span>
+              <pre class="code">      foreignColumns: [applications.id],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">42</span><span class="gutter">+</span>
+              <pre class="code">    }).onDelete("cascade"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">43</span><span class="gutter">+</span>
+              <pre class="code">
+    check("interviews_duration_minutes_positive_check", sql`${t.durationMinutes} &gt; 0`),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">44</span><span class="gutter">+</span>
+              <pre class="code">
+    index("interviews_application_id_scheduled_at_idx").on(t.applicationId, t.scheduledAt),</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 10 — relations.ts -->
+        <div class="frag-detail" data-global="10">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> One new module declaring every
+              <code>relations()</code> association across the six entity tables and the transition
+              table.
+            </p>
+            <p>
+              <strong>Why the module, not the tables.</strong> CLAUDE.md keeps feature-local things
+              beside the feature, so the default would have been a <code>relations()</code> call in
+              each table file. It does not work here: <code>relations()</code> needs the referenced
+              table as a <em>value</em> at import time, and the FK graph is not a DAG —
+              <code>applications</code> is referenced by five tables and references them back.
+              Splitting the declarations would put each pair in a two-way value-import cycle. This
+              module is the only thing that depends on all six table modules, and none of them
+              import it back.
+            </p>
+            <p>
+              <strong>What to check.</strong> Roughly thirty declarative lines, no runtime cost, no
+              extra tables, and no query runs here — the payoff is AI-43 and AI-63 writing
+              <code>db.query.&lt;table&gt;.findMany({ with: … })</code> instead of hand-rolled
+              joins. The spec flags this as droppable if a reviewer judges it speculative; all three
+              review rounds left it.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">18</span><span class="gutter">+</span>
+              <pre class="code">
+ * Collected in one module rather than beside each table: a `relations()` call needs the</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">19</span><span class="gutter">+</span>
+              <pre class="code">
+ * referenced table as a *value* at import time, and the FK graph here is not a DAG —</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">20</span><span class="gutter">+</span>
+              <pre class="code">
+ * `applications` is referenced by `jobs`/`candidates`/`interviews`/`notes`/</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">21</span><span class="gutter">+</span>
+              <pre class="code">
+ * `applicationStageTransitions` and references them back. Splitting these across the table</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">22</span><span class="gutter">+</span>
+              <pre class="code">
+ * files would put each pair in a two-way value-import cycle; this module is the only thing that</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">23</span><span class="gutter">+</span>
+              <pre class="code">
+ * depends on all six table modules, so none of them import it back.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">24</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ jobsRelations / candidatesRelations 25–32 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">33</span><span class="gutter">+</span>
+              <pre class="code">
+export const applicationsRelations = relations(applications, ({ one, many }) =&gt; ({</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">34</span><span class="gutter">+</span>
+              <pre class="code">
+  job: one(jobs, { fields: [applications.jobId], references: [jobs.id] }),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">35</span><span class="gutter">+</span>
+              <pre class="code">  candidate: one(candidates, {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">36</span><span class="gutter">+</span>
+              <pre class="code">    fields: [applications.candidateId],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">37</span><span class="gutter">+</span>
+              <pre class="code">    references: [candidates.id],</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">38</span><span class="gutter">+</span>
+              <pre class="code">  }),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">39</span><span class="gutter">+</span>
+              <pre class="code">  interviews: many(interviews),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">40</span><span class="gutter">+</span>
+              <pre class="code">  notes: many(notes),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">41</span><span class="gutter">+</span>
+              <pre class="code">  transitions: many(applicationStageTransitions),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">42</span><span class="gutter">+</span>
+              <pre class="code">}));</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 11 — 0000 generated DDL -->
+        <div class="frag-detail" data-global="11">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> The generated migration, produced by one
+              <code>pnpm db:generate</code> run over the schema files from slices 2–4. This slice
+              edits no schema file — <code>.enableRLS()</code> already sits on every table.
+            </p>
+            <p>
+              <strong>Why it matters as evidence.</strong> The schema builder's intent and the SQL
+              Postgres will actually run are two different artifacts, and only the second one is
+              what ships. These lines are where <code>onDelete("restrict")</code> becomes
+              <code>ON DELETE restrict</code>, where <code>.enableRLS()</code> becomes
+              <code>ALTER TABLE … ENABLE ROW LEVEL SECURITY</code>, and where the GIN index over
+              <code>extraction</code> materialises.
+            </p>
+            <p>
+              <strong>What to check.</strong> RLS is enabled with <strong>zero policies</strong> —
+              deliberate deny-by-default, which closes Supabase's PostgREST hole over
+              <code>candidates</code> PII at no cost to the owner role. The consequence is a hard
+              requirement on AI-43: the MCP server must connect with service/owner credentials, or
+              it reads zero rows with no obvious cause. Also note the standing land-mine: nothing in
+              <code>pnpm check</code> notices a schema edit without a regenerated migration, so
+              "schema changed ⇒ <code>drizzle/</code> changed" is a reviewer checklist item.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">114</span><span class="gutter">+</span>
+              <pre class="code">
+ALTER TABLE "pipeline_stages" ENABLE ROW LEVEL SECURITY;--&gt; statement-breakpoint</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ transition foreign keys 115–117 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">118</span><span class="gutter">+</span>
+              <pre class="code">
+ALTER TABLE "applications" ADD CONSTRAINT "applications_job_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE restrict ON UPDATE cascade;--&gt; statement-breakpoint</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">119</span><span class="gutter">+</span>
+              <pre class="code">
+ALTER TABLE "applications" ADD CONSTRAINT "applications_candidate_id_fk" FOREIGN KEY ("candidate_id") REFERENCES "public"."candidates"("id") ON DELETE restrict ON UPDATE cascade;--&gt; statement-breakpoint</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">120</span><span class="gutter">+</span>
+              <pre class="code">
+ALTER TABLE "applications" ADD CONSTRAINT "applications_stage_fk" FOREIGN KEY ("stage") REFERENCES "public"."pipeline_stages"("key") ON DELETE restrict ON UPDATE cascade;--&gt; statement-breakpoint</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">
+@@ interview / note foreign keys and btree indexes 121–128 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">129</span><span class="gutter">+</span>
+              <pre class="code">
+CREATE INDEX "applications_extraction_gin_idx" ON "applications" USING gin ("extraction");--&gt; statement-breakpoint</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 12 — 0001 seed rows + deferrable unique -->
+        <div class="frag-detail" data-global="12">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A second, hand-written migration (<code
+                >drizzle-kit generate --custom</code
+              >) inserting the seven <code>pipeline_stages</code> rows with
+              <code>ON CONFLICT (key) DO NOTHING</code>, then adding
+              <code>UNIQUE ("position") DEFERRABLE INITIALLY IMMEDIATE</code>.
+            </p>
+            <p>
+              <strong>Why here and not in the seed script.</strong> These are reference data, not
+              demo data: the <code>applications.stage</code> FK makes them a precondition for
+              <em>any</em> application insert. The demo seed never touches this table, which is also
+              why re-running migrations is idempotent.
+            </p>
+            <p>
+              <strong>What to check.</strong> The values are hand-typed SQL and can drift from
+              <code>PIPELINE_STAGE_SEED</code>, so <code>migrations.test.ts</code> asserts every
+              field of every row — <code>key</code>, <code>label</code>, <code>position</code>,
+              <code>is_terminal</code> — appears in this insert. <code>DEFERRABLE</code> is here
+              rather than in the table builder because drizzle-orm 0.45.2 cannot express it.
+              Measured, and worth knowing: the one-statement <code>CASE</code> swap needs no
+              <code>SET CONSTRAINTS</code> ceremony, because
+              <code>INITIALLY IMMEDIATE</code> already defers to end-of-statement — the README and
+              spec §3.2 overstate this, a recorded NIT.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">7</span><span class="gutter">+</span>
+              <pre class="code">
+-- Reference data: pipeline_stages is a precondition for any applications.stage insert, so it is</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">8</span><span class="gutter">+</span>
+              <pre class="code">
+-- seeded here rather than by the demo seed script (which never touches this table).</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">9</span><span class="gutter">+</span>
+              <pre class="code">
+INSERT INTO "pipeline_stages" ("key", "label", "position", "is_terminal") VALUES</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">10</span><span class="gutter">+</span>
+              <pre class="code">  ('applied', 'Applied', 1, false),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">11</span><span class="gutter">+</span>
+              <pre class="code">  ('screening', 'Screening', 2, false),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">12</span><span class="gutter">+</span>
+              <pre class="code">  ('interview', 'Interview', 3, false),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">13</span><span class="gutter">+</span>
+              <pre class="code">  ('offer', 'Offer', 4, false),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">14</span><span class="gutter">+</span>
+              <pre class="code">  ('hired', 'Hired', 5, true),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">15</span><span class="gutter">+</span>
+              <pre class="code">  ('rejected', 'Rejected', 6, true),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">16</span><span class="gutter">+</span>
+              <pre class="code">  ('withdrawn', 'Withdrawn', 7, true)</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">17</span><span class="gutter">+</span>
+              <pre class="code">ON CONFLICT ("key") DO NOTHING;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">18</span><span class="gutter">+</span>
+              <pre class="code">--&gt; statement-breakpoint</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">19</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">20</span><span class="gutter">+</span>
+              <pre class="code">
+-- Deferrable so the single most obvious reorder — one UPDATE swapping two stages' positions</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">21</span><span class="gutter">+</span>
+              <pre class="code">
+-- with a CASE expression — does not fail mid-statement on a duplicate key.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">22</span><span class="gutter">+</span>
+              <pre class="code">
+ALTER TABLE "pipeline_stages" ADD CONSTRAINT "pipeline_stages_position_key" UNIQUE ("position") DEFERRABLE INITIALLY IMMEDIATE;</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 13 — 0001 trigger function -->
+        <div class="frag-detail" data-global="13">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A <code>set_updated_at()</code> plpgsql function and
+              one <code>BEFORE UPDATE</code> trigger on each of the six tables that carry an
+              <code>updated_at</code> column.
+            </p>
+            <p>
+              <strong>Why a trigger at all.</strong> Measured: drizzle's
+              <code>.$onUpdate(…)</code> is ORM-level only and emits no DDL — the probe column
+              carrying it generated a plain <code>DEFAULT now() NOT NULL</code>. It therefore cannot
+              maintain <code>updated_at</code> for the raw <code>UPDATE</code>s Days 5 and 17 will
+              write. And note this is a deliberate <em>exception</em> to the change's own "no
+              triggers" stance: a stage-sync trigger was rejected because it would silently author
+              domain history, while <code>set_updated_at()</code> has no business semantics and is a
+              total function of the row.
+            </p>
+            <p>
+              <strong>What to check.</strong> <code>SET search_path = ''</code> pins name resolution
+              — Supabase's linter flags <code>function_search_path_mutable</code> on every SECURITY
+              INVOKER function — which is why <code>now()</code> has to be written as
+              <code>pg_catalog.now()</code>. The test asserts every table exposing
+              <code>updated_at</code> has a matching <code>CREATE TRIGGER</code>. Verified live:
+              <code>updated_at &gt; created_at</code> after a bare <code>UPDATE</code>.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">25</span><span class="gutter">+</span>
+              <pre class="code">
+-- Maintains updated_at for the raw UPDATEs Days 5/17 will issue, which .$onUpdate() cannot</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">26</span><span class="gutter">+</span>
+              <pre class="code">
+-- reach (it is ORM-level only and emits no DDL). Total function of the row, no business</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">27</span><span class="gutter">+</span>
+              <pre class="code">-- semantics — see docs/specs/ai-34-domain-model.md §3.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">28</span><span class="gutter">+</span>
+              <pre class="code">--</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">29</span><span class="gutter">+</span>
+              <pre class="code">
+-- `SET search_path = ''` pins name resolution so this function cannot be hijacked by a</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">30</span><span class="gutter">+</span>
+              <pre class="code">
+-- same-named object created earlier in another schema on the search path (Supabase's linter</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">31</span><span class="gutter">+</span>
+              <pre class="code">
+-- flags a mutable search_path on every SECURITY INVOKER function for this reason); `now()` is</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">32</span><span class="gutter">+</span>
+              <pre class="code">
+-- qualified as `pg_catalog.now()` because pinning the search_path to empty means an unqualified</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">33</span><span class="gutter">+</span>
+              <pre class="code">-- built-in no longer resolves.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">34</span><span class="gutter">+</span>
+              <pre class="code">CREATE FUNCTION "set_updated_at"() RETURNS trigger AS $$</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">35</span><span class="gutter">+</span>
+              <pre class="code">BEGIN</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">36</span><span class="gutter">+</span>
+              <pre class="code">  NEW.updated_at = pg_catalog.now();</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">37</span><span class="gutter">+</span>
+              <pre class="code">  RETURN NEW;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">38</span><span class="gutter">+</span>
+              <pre class="code">END;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">39</span><span class="gutter">+</span>
+              <pre class="code">$$ LANGUAGE plpgsql SET search_path = '';</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ 40–41 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">42</span><span class="gutter">+</span>
+              <pre class="code">
+CREATE TRIGGER "pipeline_stages_set_updated_at" BEFORE UPDATE ON "pipeline_stages" FOR EACH ROW EXECUTE FUNCTION "set_updated_at"();</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 14 — buildSeedDataset -->
+        <div class="frag-detail" data-global="14">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> <code>buildSeedDataset({ now })</code> — a pure
+              function returning every row for every table, with a small seeded PRNG, no
+              <code>Math.random</code>, no <code>Date.now()</code> inside, and no
+              <code>faker</code>.
+            </p>
+            <p>
+              <strong>Why <code>now</code> is a required parameter with no default.</strong> A
+              default would reintroduce exactly the ambiguity it exists to remove. The runner passes
+              the real clock, so the data always looks recent; tests pass a fixed instant, so
+              <code>buildSeedDataset({ now: FIXED })</code> called twice deep-equals itself. Every
+              timestamp in the dataset is an offset from <code>now</code>; no other source of
+              "current time" is read.
+            </p>
+            <p>
+              <strong>What to check.</strong> No <code>faker</code> is a decision, not an omission:
+              lorem prose would make the RAG corpus worthless, and the corpus is the point of the
+              free-text columns. Determinism is what lets the offline test assert exact invariants —
+              funnel reach non-increasing across the non-terminal stages, every FK resolving within
+              the dataset, every row parsing against <code>createInsertSchema(&lt;table&gt;)</code>.
+              Output: 8 jobs, 60 candidates, 90 applications, 293 transitions, 40 interviews, 120
+              notes, 12 extraction payloads, ~73k characters of prose.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">488</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">489</span><span class="gutter">+</span>
+              <pre class="code">
+ * Builds one seed dataset for every table in `docs/specs/ai-34-domain-model.md` §3. `now` is</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">490</span><span class="gutter">+</span>
+              <pre class="code">
+ * required, with no default, so the same `now` always yields a byte-for-byte identical dataset</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">491</span><span class="gutter">+</span>
+              <pre class="code">
+ * (the DoD's determinism assertion) while a test can still exercise a fixed instant and the</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">492</span><span class="gutter">+</span>
+              <pre class="code">
+ * runner can pass the real `new Date()`. Every timestamp below is an offset from `now`; no other</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">493</span><span class="gutter">+</span>
+              <pre class="code"> * source of "current time" is read.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">494</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">495</span><span class="gutter">+</span>
+              <pre class="code">
+export function buildSeedDataset({ now }: { now: Date }): SeedDataset {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">496</span><span class="gutter">+</span>
+              <pre class="code">  const rng = createRng(PRNG_SEED);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">497</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">498</span><span class="gutter">+</span>
+              <pre class="code">  const jobIds = JOB_DEFINITIONS.map(() =&gt; nextId(rng));</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">499</span><span class="gutter">+</span>
+              <pre class="code">
+  const jobs: NewJob[] = JOB_DEFINITIONS.map((def, index) =&gt; ({</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 15 — reserved email domain -->
+        <div class="frag-detail" data-global="15">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> Candidate emails move from a rotation of five real mail
+              providers (<code>gmail.com</code>, <code>outlook.com</code>, <code>proton.me</code>,
+              <code>icloud.com</code>, <code>fastmail.com</code>) to a single RFC 2606 reserved
+              <code>.example</code> domain.
+            </p>
+            <p>
+              <strong>Why.</strong> Review round 2 caught it: sixty invented candidates were holding
+              addresses that may be live mailboxes belonging to actual people, and the very next
+              ticket in the chain is AI-112 — "store approved applications <em>and notify</em>". The
+              first notification feature built on this data would have mailed strangers. The rest of
+              the file already got this right; <code>phoneFor</code> uses the reserved
+              <code>555-01XX</code> block and <code>resumeUrlFor</code> uses <code>.example</code>.
+              Email was the one that missed the pattern.
+            </p>
+            <p>
+              <strong>What to check.</strong> The same round found the mirror-image bug in the
+              extraction payloads: high-confidence extracted emails disagreed with the authoritative
+              <code>candidates.email</code> column, so the only fields that <em>did</em> agree were
+              the low-confidence ones — exactly inverted from what AC 4 is meant to demonstrate.
+              Both are fixed in <code>fc51b38</code>, with a test that cross-checks high-confidence
+              extraction fields against their column.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">117</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">118</span><span class="gutter">+</span>
+              <pre class="code">
+ * RFC 2606 reserves `.example` for exactly this use — sixty invented candidates at real</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">119</span><span class="gutter">+</span>
+              <pre class="code">
+ * mail-provider domains (gmail.com, outlook.com, ...) could collide with a live mailbox that</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">120</span><span class="gutter">+</span>
+              <pre class="code">
+ * belongs to an actual person. Named after `resumeUrlFor`'s `resumes.talentscout.example`, below.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">121</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">122</span><span class="gutter">+</span>
+              <pre class="code">
+const CANDIDATE_EMAIL_DOMAIN = "candidates.talentscout.example";</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">123</span><span class="gutter">+</span>
+              <pre class="code">const PHONE_AREA_CODES = ["415", "212", "312", "512"];</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ nameParts 124–129 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">130</span><span class="gutter">+</span>
+              <pre class="code">
+/** A fake-but-plausible email, lowercase and unique because every candidate's name is distinct. */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">131</span><span class="gutter">+</span>
+              <pre class="code">function emailFor(fullName: string): string {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">132</span><span class="gutter">+</span>
+              <pre class="code">  const { first, last } = nameParts(fullName);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">133</span><span class="gutter">+</span>
+              <pre class="code">
+  return `${slug(first)}.${slug(last)}@${CANDIDATE_EMAIL_DOMAIN}`;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">134</span><span class="gutter">+</span>
+              <pre class="code">}</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">@@ 135–136 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">137</span><span class="gutter">+</span>
+              <pre class="code">function phoneFor(index: number): string {</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 16 — clampToTerminal -->
+        <div class="frag-detail" data-global="16">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> A <code>clampToTerminal</code> step in the interview
+              builder: for an application whose path ends in a terminal stage,
+              <code>scheduledAt</code> is capped at that terminal transition (or at
+              <code>now</code>, whichever is earlier).
+            </p>
+            <p>
+              <strong>Why.</strong> Review round 1's concrete find: an application went
+              <code>rejected</code> on 2026-07-14 and then carried a
+              <code>completed</code> technical interview on 2026-07-17, with written feedback and a
+              <code>strong_no</code> recommendation. The rejection predated the interview that
+              justified it — in a dataset whose entire purpose is to be a coherent corpus for Day
+              13's RAG. Three hires had the same shape. The lower bound existed already (an
+              interview cannot precede the stage its <code>kind</code> implies); only the upper end
+              was open.
+            </p>
+            <p>
+              <strong>What to check.</strong> Non-terminal applications are deliberately untouched,
+              because a genuinely future <code>scheduled</code> interview is a real, intended case —
+              and review round 2 found that branch was dead, which the same commit fixed by
+              scheduling a handful forward of <code>now</code>. Two sibling temporal fixes landed
+              alongside: an application can no longer predate the job it applied to, and
+              <code>created_at</code> is no longer the seed-run instant everywhere.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">378</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">379</span><span class="gutter">+</span>
+              <pre class="code">
+ * Clamps a candidate `scheduledAt` so an interview can never be dated after the application's</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">380</span><span class="gutter">+</span>
+              <pre class="code">
+ * own terminal transition (or after `now`, for a terminal transition that has not — impossibly —</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">381</span><span class="gutter">+</span>
+              <pre class="code">
+ * happened yet): a `rejected`/`hired`/`withdrawn` application cannot later acquire an interview</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">382</span><span class="gutter">+</span>
+              <pre class="code">
+ * that postdates the decision it would have to justify. Non-terminal applications are untouched,</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">383</span><span class="gutter">+</span>
+              <pre class="code">
+ * since a genuinely future `scheduled` interview is a real, intended case (§5 slice 7).</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">384</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">385</span><span class="gutter">+</span>
+              <pre class="code">
+function clampToTerminal(plan: ApplicationPlan, now: Date, scheduledAt: Date): Date {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">386</span><span class="gutter">+</span>
+              <pre class="code">  const finalStage = plan.path[plan.path.length - 1];</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">387</span><span class="gutter">+</span>
+              <pre class="code">
+  if (!TERMINAL_STAGES.includes(finalStage)) return scheduledAt;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">388</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">389</span><span class="gutter">+</span>
+              <pre class="code">
+  const terminalOccurredAt = plan.transitionDates[plan.transitionDates.length - 1];</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">390</span><span class="gutter">+</span>
+              <pre class="code">
+  const ceiling = terminalOccurredAt.getTime() &lt;= now.getTime() ? terminalOccurredAt : now;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">391</span><span class="gutter">+</span>
+              <pre class="code">
+  return scheduledAt.getTime() &gt; ceiling.getTime() ? ceiling : scheduledAt;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">392</span><span class="gutter">+</span>
+              <pre class="code">}</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 17 — seed-preflight -->
+        <div class="frag-detail" data-global="17">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> <code>assertSeedTargetsEmpty(counts)</code> — a pure,
+              connection-free guard that throws a named
+              <code>SeedTargetsNotEmptyError</code> listing every populated table.
+            </p>
+            <p>
+              <strong>Why this shape.</strong> A hardening round raised the re-run semantics as a
+              BLOCKER: the seed had three incompatible plausible designs (truncate-then-insert,
+              upsert, refuse) and the implementer would have had to invent one — against a database
+              the <em>user</em> runs it on, possibly the hosted project. The resolution went further
+              than the critique asked. The seed does not merely guard a reset path;
+              <strong>there is no reset path at all, not even an opt-in one</strong>. Nothing in
+              <code>scripts/</code> can remove a row, so pointing it at the hosted project cannot
+              destroy data, and the BLOCKER never had to become an escalation.
+            </p>
+            <p>
+              <strong>What to check.</strong> Being pure is what makes it testable with no database:
+              the runner supplies real counts, a test supplies fake ones. Local re-seeding is
+              documented as the Supabase CLI's re-initialisation workflow instead. Verified live: a
+              second <code>pnpm db:seed</code> refuses, names all six populated tables, exits
+              <strong>1</strong>, and leaves row counts unchanged.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">21</span><span class="gutter">+</span>
+              <pre class="code">/**</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">22</span><span class="gutter">+</span>
+              <pre class="code">
+ * Refuses to proceed if any seed target table already has rows. Pure and connection-free, so it</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">23</span><span class="gutter">+</span>
+              <pre class="code">
+ * is unit-testable with no database: `scripts/db-seed.ts` supplies real row counts, and a test</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">24</span><span class="gutter">+</span>
+              <pre class="code">
+ * supplies fake ones. There is deliberately no counterpart that empties a table — the demo seed</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">25</span><span class="gutter">+</span>
+              <pre class="code">
+ * has no reset path at all, not even an opt-in one. See docs/specs/ai-34-domain-model.md §4</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">26</span><span class="gutter">+</span>
+              <pre class="code">
+ * "Seed re-run semantics", the safety property a hardening round made non-negotiable.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">27</span><span class="gutter">+</span>
+              <pre class="code"> */</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">28</span><span class="gutter">+</span>
+              <pre class="code">
+export function assertSeedTargetsEmpty(counts: Readonly&lt;Record&lt;string, number&gt;&gt;): void {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">29</span><span class="gutter">+</span>
+              <pre class="code">  const populatedTables = Object.entries(counts)</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">30</span><span class="gutter">+</span>
+              <pre class="code">    .filter(([, rowCount]) =&gt; rowCount &gt; 0)</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">31</span><span class="gutter">+</span>
+              <pre class="code">    .map(([table]) =&gt; table);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">32</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">33</span><span class="gutter">+</span>
+              <pre class="code">  if (populatedTables.length &gt; 0) {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">34</span><span class="gutter">+</span>
+              <pre class="code">    throw new SeedTargetsNotEmptyError(populatedTables);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">35</span><span class="gutter">+</span>
+              <pre class="code">  }</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">36</span><span class="gutter">+</span>
+              <pre class="code">}</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- fragment 18 — db-seed dry-run + insert-only transaction -->
+        <div class="frag-detail" data-global="18">
+          <div class="frag-why">
+            <h3>Why / what to check</h3>
+            <p>
+              <strong>What changed.</strong> The seed runner builds and prints the dataset, then
+              returns on <code>--dry-run</code> <em>before</em> the dynamic imports of
+              <code>@/env</code>, <code>drizzle-orm/postgres-js</code> and
+              <code>postgres</code> exist. Past that point it opens one connection over
+              <code>DIRECT_DATABASE_URL</code> and runs a single transaction: six counts, the
+              preflight, six inserts.
+            </p>
+            <p>
+              <strong>Why the imports are deferred.</strong> A top-level
+              <code>import { env } from "@/env"</code> would make <code>--dry-run</code> require a
+              valid <code>DIRECT_DATABASE_URL</code> to print a row count — which defeats the point
+              of a dry run, and would have made the slice's own DoD unverifiable offline. Measured:
+              both <code>--dry-run</code> paths exit 0 with neither database key set.
+            </p>
+            <p>
+              <strong>What to check.</strong> Read the transaction body as a safety property, not as
+              plumbing: it contains six <code>insert</code> calls and nothing else. A grep over
+              <code>scripts/</code> finds no row-removing SQL verb anywhere. Parents before children
+              is a correctness constraint here, not style — with <code>NOT NULL</code>
+              <code>RESTRICT</code> FKs, any other order fails. Runners live under
+              <code>scripts/</code> rather than <code>src/</code> because
+              <code>check-console.sh</code> fails on <code>console.log</code> anywhere under
+              <code>src/</code>, and using <code>console.info</code> to slip past it would be
+              evasion, not a fix.
+            </p>
+          </div>
+          <div class="diff">
+            <div class="diff-line add">
+              <span class="ln">52</span><span class="gutter">+</span>
+              <pre class="code">  if (dryRun) {</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">53</span><span class="gutter">+</span>
+              <pre class="code">
+    console.log("[db-seed] --dry-run: not connecting to a database.");</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">54</span><span class="gutter">+</span>
+              <pre class="code">    return;</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">55</span><span class="gutter">+</span>
+              <pre class="code">  }</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">56</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">57</span><span class="gutter">+</span>
+              <pre class="code">
+  // Deferred until the dry-run short-circuit above has returned, so a dry run never opens a</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">58</span><span class="gutter">+</span>
+              <pre class="code">  // database connection or reads DIRECT_DATABASE_URL.</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">59</span><span class="gutter">+</span>
+              <pre class="code">
+  const [{ env }, { drizzle }, { default: postgres }] = await Promise.all([</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">60</span><span class="gutter">+</span>
+              <pre class="code">    import("@/env"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">61</span><span class="gutter">+</span>
+              <pre class="code">    import("drizzle-orm/postgres-js"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">62</span><span class="gutter">+</span>
+              <pre class="code">    import("postgres"),</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">63</span><span class="gutter">+</span>
+              <pre class="code">  ]);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">64</span><span class="gutter">+</span>
+              <pre class="code"></pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">65</span><span class="gutter">+</span>
+              <pre class="code">  const sql = postgres(env.DIRECT_DATABASE_URL, { max: 1 });</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">66</span><span class="gutter">+</span>
+              <pre class="code">  const db = drizzle(sql);</pre>
+            </div>
+            <div class="diff-line skip">
+              <span class="ln">⋯</span><span class="gutter"> </span>
+              <pre class="code">
+@@ transaction opens, six counts, assertSeedTargetsEmpty 67–98 omitted @@</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">99</span><span class="gutter">+</span>
+              <pre class="code">      await tx.insert(jobs).values(dataset.jobs);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">100</span><span class="gutter">+</span>
+              <pre class="code">      await tx.insert(candidates).values(dataset.candidates);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">101</span><span class="gutter">+</span>
+              <pre class="code">
+      await tx.insert(applications).values(dataset.applications);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">102</span><span class="gutter">+</span>
+              <pre class="code">
+      await tx.insert(applicationStageTransitions).values(dataset.stageTransitions);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">103</span><span class="gutter">+</span>
+              <pre class="code">      await tx.insert(interviews).values(dataset.interviews);</pre>
+            </div>
+            <div class="diff-line add">
+              <span class="ln">104</span><span class="gutter">+</span>
+              <pre class="code">      await tx.insert(notes).values(dataset.notes);</pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="frag-nav">
+          <button class="nbtn" id="prevFragBtn">← Prev fragment</button>
+          <button class="nbtn" id="nextFragBtn">Next fragment →</button>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        var mapView = document.getElementById("view-map");
+        var fragView = document.getElementById("view-fragment");
+        var featureBtns = [].slice.call(document.querySelectorAll(".feature-btn"));
+        var featurePanels = [].slice.call(document.querySelectorAll(".feature-panel"));
+        var fragmentCards = [].slice.call(document.querySelectorAll(".fragment-card"));
+        var fragDetails = [].slice.call(document.querySelectorAll(".frag-detail"));
+        var fragTitleEl = document.getElementById("fragTitle");
+        var fragFeatureEl = document.getElementById("fragFeature");
+        var fragPosEl = document.getElementById("fragPos");
+        var zoomOutBtn = document.getElementById("zoomOutBtn");
+        var prevFragBtn = document.getElementById("prevFragBtn");
+        var nextFragBtn = document.getElementById("nextFragBtn");
+
+        // Flat, ordered list of fragments (map order = document order of .fragment-card).
+        var flat = fragmentCards.map(function (card, idx) {
+          var head = card.querySelector(".frag-head .mono");
+          var panel = card.closest(".feature-panel");
+          var featureBtn = document.querySelector(
+            '.feature-btn[data-feature="' + panel.id.split("-").pop() + '"]',
+          );
+          return {
+            global: idx,
+            card: card,
+            featureIndex: parseInt(panel.id.split("-").pop(), 10),
+            featureName: featureBtn ? featureBtn.querySelector("strong").textContent : "",
+            title: head ? head.textContent : "",
+          };
+        });
+
+        var state = { view: "map", feature: 0, fragment: 0 };
+        var lastCard = null;
+
+        function selectFeature(idx) {
+          state.feature = idx;
+          featureBtns.forEach(function (btn) {
+            var selected = parseInt(btn.dataset.feature, 10) === idx;
+            btn.setAttribute("aria-selected", selected ? "true" : "false");
+          });
+          featurePanels.forEach(function (panel, i) {
+            panel.classList.toggle("active", i === idx);
+          });
+        }
+
+        function showMap() {
+          state.view = "map";
+          mapView.classList.add("active");
+          mapView.setAttribute("aria-hidden", "false");
+          fragView.classList.remove("active");
+          fragView.setAttribute("aria-hidden", "true");
+        }
+
+        function showFragment(globalIdx) {
+          var f = flat[globalIdx];
+          if (!f) return;
+          state.view = "fragment";
+          state.fragment = globalIdx;
+          state.feature = f.featureIndex;
+          selectFeature(f.featureIndex);
+
+          fragDetails.forEach(function (d) {
+            d.classList.toggle("active", parseInt(d.dataset.global, 10) === globalIdx);
+          });
+          fragTitleEl.textContent = f.title;
+          fragFeatureEl.textContent = f.featureName;
+          fragPosEl.textContent = "fragment " + (globalIdx + 1) + " / " + flat.length;
+          prevFragBtn.disabled = globalIdx === 0;
+          nextFragBtn.disabled = globalIdx === flat.length - 1;
+
+          mapView.classList.remove("active");
+          mapView.setAttribute("aria-hidden", "true");
+          fragView.classList.add("active");
+          fragView.setAttribute("aria-hidden", "false");
+        }
+
+        function zoomIn(card) {
+          lastCard = card;
+          var globalIdx = parseInt(card.dataset.global, 10);
+          showFragment(globalIdx);
+          fragTitleEl.focus();
+        }
+
+        function zoomOut() {
+          showMap();
+          var target = lastCard || (flat[state.fragment] && flat[state.fragment].card);
+          if (target) {
+            target.focus();
+          }
+        }
+
+        function nextFragment() {
+          if (state.fragment < flat.length - 1) {
+            showFragment(state.fragment + 1);
+            lastCard = flat[state.fragment].card;
+            fragTitleEl.focus();
+          }
+        }
+        function prevFragment() {
+          if (state.fragment > 0) {
+            showFragment(state.fragment - 1);
+            lastCard = flat[state.fragment].card;
+            fragTitleEl.focus();
+          }
+        }
+
+        featureBtns.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            selectFeature(parseInt(btn.dataset.feature, 10));
+          });
+        });
+
+        fragmentCards.forEach(function (card) {
+          card.addEventListener("click", function () {
+            zoomIn(card);
+          });
+        });
+
+        zoomOutBtn.addEventListener("click", zoomOut);
+        nextFragBtn.addEventListener("click", nextFragment);
+        prevFragBtn.addEventListener("click", prevFragment);
+
+        document.addEventListener("keydown", function (e) {
+          if (state.view === "fragment") {
+            if (e.key === "ArrowRight") {
+              nextFragment();
+              e.preventDefault();
+            } else if (e.key === "ArrowLeft") {
+              prevFragment();
+              e.preventDefault();
+            } else if (e.key === "Escape") {
+              zoomOut();
+              e.preventDefault();
+            }
+          } else {
+            if (
+              e.key === "Enter" &&
+              document.activeElement &&
+              document.activeElement.classList.contains("fragment-card")
+            ) {
+              zoomIn(document.activeElement);
+              e.preventDefault();
+            }
+          }
+          if (e.key.toLowerCase() === "f") {
+            if (document.fullscreenElement) {
+              document.exitFullscreen();
+            } else {
+              document.documentElement.requestFullscreen();
+            }
+          }
+        });
+
+        selectFeature(0);
+        showMap();
+      })();
+    </script>
+  </body>
+</html>
