@@ -25,12 +25,18 @@ ALTER TABLE "pipeline_stages" ADD CONSTRAINT "pipeline_stages_position_key" UNIQ
 -- Maintains updated_at for the raw UPDATEs Days 5/17 will issue, which .$onUpdate() cannot
 -- reach (it is ORM-level only and emits no DDL). Total function of the row, no business
 -- semantics — see docs/specs/ai-34-domain-model.md §3.
+--
+-- `SET search_path = ''` pins name resolution so this function cannot be hijacked by a
+-- same-named object created earlier in another schema on the search path (Supabase's linter
+-- flags a mutable search_path on every SECURITY INVOKER function for this reason); `now()` is
+-- qualified as `pg_catalog.now()` because pinning the search_path to empty means an unqualified
+-- built-in no longer resolves.
 CREATE FUNCTION "set_updated_at"() RETURNS trigger AS $$
 BEGIN
-  NEW.updated_at = now();
+  NEW.updated_at = pg_catalog.now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = '';
 --> statement-breakpoint
 
 CREATE TRIGGER "pipeline_stages_set_updated_at" BEFORE UPDATE ON "pipeline_stages" FOR EACH ROW EXECUTE FUNCTION "set_updated_at"();

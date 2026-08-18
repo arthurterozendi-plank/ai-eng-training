@@ -183,8 +183,15 @@ reorder — one `UPDATE` swapping two stages' positions with a `CASE` expression
 duplicate key error part-way through the statement, which directly contradicts the reason this is a
 table rather than an enum. `drizzle-orm@0.45.2`'s `unique()` has no `DEFERRABLE` option (verified),
 so the constraint is written by hand as an `ALTER TABLE … ADD CONSTRAINT … UNIQUE (position)
-DEFERRABLE INITIALLY IMMEDIATE`. Reordering is then `SET CONSTRAINTS ALL DEFERRED` inside a
-transaction, followed by the swap. Uniqueness is worth keeping rather than removing: duplicate
+DEFERRABLE INITIALLY IMMEDIATE`. A single-statement reorder — one `UPDATE … SET position = CASE …`
+swapping two or more positions — succeeds unaided against this constraint, with no
+`SET CONSTRAINTS ALL DEFERRED` ceremony required: measured against a Postgres 17 instance, marking
+a constraint `DEFERRABLE` changes its enforcement from a plain index check to the constraint-trigger
+mechanism, and `INITIALLY IMMEDIATE` for that mechanism means "checked at end of statement," not
+"checked after every row" — which is already enough for every row the one `UPDATE` touches to reach
+its final value before uniqueness is checked once. `SET CONSTRAINTS ALL DEFERRED` only matters if a
+reorder is ever split across multiple statements in the same transaction, in which case it defers the
+check all the way to `COMMIT`. Uniqueness is worth keeping rather than removing: duplicate
 positions make the funnel order ambiguous, and Day 9's chart sorts on it. Because drizzle-kit diffs
 against its own snapshot rather than the live database, a hand-written constraint is invisible to
 future `generate` runs and survives — but see the `drizzle-kit push` land-mine in Risks.

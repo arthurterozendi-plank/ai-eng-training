@@ -73,8 +73,10 @@ pnpm db:migrate               # applies drizzle/*.sql, including the seeded pipe
 pnpm db:seed                  # inserts the demo dataset: jobs, candidates, applications, …
 ```
 
-`pnpm db:seed --dry-run` builds and prints the dataset's row counts without connecting to
-anything — useful for a sanity check before pointing it at a real database.
+`pnpm db:migrate --dry-run` lists the migration files in `drizzle/` that would be applied without
+opening a connection. `pnpm db:seed --dry-run` builds and prints the dataset's row counts without
+connecting to anything. Both are useful for a sanity check before pointing either at a real
+database.
 
 **The seed has no reset path — deliberately.** It refuses with a non-zero exit and names every
 already-populated table (`jobs`, `candidates`, `applications`, `application_stage_transitions`,

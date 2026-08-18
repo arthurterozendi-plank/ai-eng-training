@@ -1,4 +1,4 @@
-import type { PipelineStageKey } from "./schema/pipeline-stages";
+import type { PipelineStageKey } from "@/lib/db/schema/pipeline-stages";
 
 /**
  * The functional area a job posting belongs to, used to pick track-appropriate detail phrases
@@ -1171,6 +1171,87 @@ export const EXTRACTION_ASSIGNMENTS: ExtractionAssignmentDefinition[] = [
       yearsExperience: { value: 4, confidence: 0.9, source: "resume.pdf#page=1" },
       meetingsBookedPerMonth: { value: 0, confidence: 0.35, source: "resume.pdf#page=1" },
     },
+  },
+];
+
+/**
+ * One application's `cover_letter` body, keyed by which (candidate, job) pair it attaches to —
+ * same keying convention as `ExtractionAssignmentDefinition`.
+ */
+export interface CoverLetterAssignmentDefinition {
+  candidateIndex: number;
+  jobIndex: number;
+  body: string;
+}
+
+/**
+ * Twelve applications carrying a populated `cover_letter` (§3.5's RAG-corpus note), spanning all
+ * seven job tracks and two candidates (indexes 0 and 11) who also carry an `extraction` payload
+ * on the same application, since a real application can have both. Written directly rather than
+ * templated: a cover letter is the one document a candidate wrote specifically for this job, so
+ * a frame function substituting a name and a job title into a fixed shape would read as obviously
+ * fake, defeating the point of seeding a RAG corpus with prose worth retrieving.
+ */
+export const COVER_LETTER_ASSIGNMENTS: CoverLetterAssignmentDefinition[] = [
+  {
+    candidateIndex: 0,
+    jobIndex: 0,
+    body: `I'm applying for the Senior Backend Engineer role because the posting's framing of "a schema decision gets written down with its reasoning" is exactly the kind of team I want to be on. At Talus Payments I spent the better part of two years arguing for, and then executing, the move off a single Rails monolith, and the part I'm proudest of isn't the migration itself but the decision log we kept alongside it — it's saved us more than once when someone asked "why does this table look like this." I'd want to bring that same habit here. Happy to walk through the reconciliation-error work in more detail on a call.`,
+  },
+  {
+    candidateIndex: 3,
+    jobIndex: 1,
+    body: `I've spent the last three years building and maintaining a design system that four product squads ship against daily, so the idea of joining a two-person frontend team where I'd be shaping the design system from scratch is genuinely exciting rather than daunting. What caught my attention in the posting was the line about performance and accessibility being first-class, not a cleanup pass — that's been my argument at Practical Habits Co for years, not always successfully. I'd welcome the chance to make that case somewhere it's already the stated bar.`,
+  },
+  {
+    candidateIndex: 8,
+    jobIndex: 1,
+    body: `Ten years into e-commerce frontend, I'm looking for the next hard migration, and the Frontend Engineer posting reads like exactly that: a recruiter dashboard that needs to hold up under real usage, not a green-field toy. I led a six-engineer strangler migration off legacy PHP templating at Fernwood Studio with zero downtime windows, and what I learned there — mostly about sequencing, and about which shortcuts you can't take — is directly applicable to a data-heavy dashboard like the one described. I'd like to talk through how I'd approach the funnel-chart work specifically.`,
+  },
+  {
+    candidateIndex: 11,
+    jobIndex: 3,
+    body: `Trellis HR's admin console redesign taught me that a confusing B2B interface doesn't just annoy people, it generates support tickets someone has to read every day — so a posting that opens with "recruiters are not a forgiving audience" told me this team already understands the stakes I care about. I run my own usability tests rather than wait for a researcher to be staffed, which the posting explicitly says is welcome here rather than merely tolerated. I'd love to bring the same research-led approach to the funnel and candidate-detail views.`,
+  },
+  {
+    candidateIndex: 14,
+    jobIndex: 3,
+    body: `I design for other engineers, and a recruiter dashboard used by people juggling dozens of pipelines at once is close enough to the developer-tools work I've done at Halyard Systems that I think I'd ramp quickly. What I'd want to bring specifically is the habit of testing copy against real error and empty states rather than lorem ipsum — the posting's emphasis on shaping the design system from near-zero suggests those decisions haven't been made yet, which is exactly the stage I like joining at. My portfolio has a case study on the deployment-dashboard redesign that I think maps well to this role.`,
+  },
+  {
+    candidateIndex: 18,
+    jobIndex: 4,
+    body: `I noticed this is a contract role, and I want to be upfront that a fixed-term engagement is genuinely appealing to me right now rather than a compromise — I like the focus a defined scope brings. My work at Cascade Wellness was mixed-methods by necessity: quant surveys to find where to look, qual interviews to understand why. Building a research repository that outlives the project seems to be exactly what this role is asking for, and it's something I've done once already and would want to do again somewhere the team explicitly values it.`,
+  },
+  {
+    candidateIndex: 21,
+    jobIndex: 5,
+    body: `I was promoted from SDR to AE at Ridgeback Logistics specifically because I was particular about qualification — I'd rather walk away from a deal early than let it sit in the pipeline looking healthier than it is. The posting's note that most pipeline will come from SDR-sourced meetings, with room to build some of my own, is the setup I want: enough structure to focus on closing well, enough room to keep the outbound instincts I built as an SDR. Happy to talk through how I qualify a deal on a call.`,
+  },
+  {
+    candidateIndex: 27,
+    jobIndex: 6,
+    body: `I'm six months into my first sales role and already the fastest ramp on my team at Practical Habits Co, mostly from shadowing every AE call I could get invited to in my first two weeks — so a posting that says the SDR seat feeds directly into an AE team I could learn from told me this is the kind of environment where I'd keep improving fast. I'm direct about what I don't know yet, which I think matters more early in a sales career than pretending otherwise.`,
+  },
+  {
+    candidateIndex: 30,
+    jobIndex: 0,
+    body: `Loomstack has been small enough that I've never had the luxury of specializing, so I've built both the API layer and the React frontend for most of what I've shipped there — but this posting is specifically for backend, and that's a deliberate choice on my part: I want to go deep on the schema and migration work rather than keep splitting time. The line about being "the person who gets paged when a stage-transition write fails halfway through" is, for what it's worth, the part of the job I actually enjoy.`,
+  },
+  {
+    candidateIndex: 33,
+    jobIndex: 1,
+    body: `Both of my previous roles were pre-Series-A, which means I'm used to shipping something imperfect and fixing it once real usage data exists rather than over-designing up front — I think that instinct transfers well to a small team like this one where, per the posting, I'd be working directly with backend engineers on API shape rather than through a spec. I'd want to talk specifically about the natural-language query interface mentioned for later this year; that's the kind of ambiguous, not-yet-scoped work I tend to do well with.`,
+  },
+  {
+    candidateIndex: 36,
+    jobIndex: 2,
+    body: `I moved from Willowmere Health's core API to their data platform team six months ago, and the thing I didn't expect is how much my four years on the API side helps me now — I know exactly which upstream services produce dirty data and why, instead of discovering it the hard way. The posting's honesty about being paused while the underlying schema work finishes is actually a point in its favor for me; I'd rather join once the foundation is closer to settled than fight both problems at once.`,
+  },
+  {
+    candidateIndex: 45,
+    jobIndex: 3,
+    body: `Willowmere Health's patient portal work means I've spent years negotiating with compliance about how much friction is actually required versus assumed, which is a specific kind of design problem I don't think shows up in every portfolio review. I run usability tests with real patients recruited through the clinic rather than relying only on internal stakeholder opinion, and I'd want to bring that same discipline to whatever recruiter-facing testing this role needs, even without an in-house research function to lean on yet.`,
   },
 ];
 

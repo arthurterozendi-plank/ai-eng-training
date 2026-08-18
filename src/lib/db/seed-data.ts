@@ -1,17 +1,19 @@
+import type { NewApplicationStageTransition } from "@/lib/db/schema/application-stage-transitions";
+import type { NewApplication } from "@/lib/db/schema/applications";
+import type { NewCandidate } from "@/lib/db/schema/candidates";
+import type { NewInterview } from "@/lib/db/schema/interviews";
+import type { NewJob } from "@/lib/db/schema/jobs";
+import type { NewNote } from "@/lib/db/schema/notes";
+import type { PipelineStageKey } from "@/lib/db/schema/pipeline-stages";
+
 import type { ExtractionPayload } from "./extraction";
-import type { NewApplicationStageTransition } from "./schema/application-stage-transitions";
-import type { NewApplication } from "./schema/applications";
-import type { NewCandidate } from "./schema/candidates";
-import type { NewInterview } from "./schema/interviews";
-import type { NewJob } from "./schema/jobs";
-import type { NewNote } from "./schema/notes";
-import type { PipelineStageKey } from "./schema/pipeline-stages";
 import {
   APPLICATION_NOTE_FRAMES,
   APPLIED_DAYS_AGO_RANGE,
   CANDIDATE_DEFINITIONS,
   CANDIDATE_GROUPS,
   CANDIDATE_NOTE_FRAMES,
+  COVER_LETTER_ASSIGNMENTS,
   EXTRACTION_ASSIGNMENTS,
   FEEDBACK_FRAMES,
   FINAL_DETAIL_PHRASES,
@@ -183,9 +185,17 @@ function gapDaysFor(stage: PipelineStageKey, rng: () => number): number {
   return nextInt(rng, min, max);
 }
 
-function appliedDaysAgoFor(pathKey: string, rng: () => number): number {
+/**
+ * `appliedDaysAgoFor`'s draw, capped so an application can never predate the job it applies to
+ * (`appliedAt >= job.openedAt`, i.e. `appliedDaysAgo <= job.openedDaysAgo`). Every job's
+ * `openedDaysAgo` (70+, see `JOB_DEFINITIONS`) is comfortably above every path's own range, so
+ * this only ever narrows the draw — it never conflicts with the path's minimum.
+ */
+function appliedDaysAgoFor(pathKey: string, jobOpenedDaysAgo: number, rng: () => number): number {
   const [min, max] = APPLIED_DAYS_AGO_RANGE[pathKey];
-  return nextInt(rng, min, max);
+  const clampedMax = Math.min(max, jobOpenedDaysAgo);
+  const clampedMin = Math.min(min, clampedMax);
+  return nextInt(rng, clampedMin, clampedMax);
 }
 
 const TERMINAL_STAGES: readonly PipelineStageKey[] = ["hired", "rejected", "withdrawn"];
@@ -195,6 +205,50 @@ function reasonFor(stage: PipelineStageKey, rng: () => number): string | null {
   if (stage === "rejected") return pick(rng, REJECTION_REASONS);
   if (stage === "withdrawn") return pick(rng, WITHDRAWN_REASONS);
   return null;
+}
+
+/**
+ * A closed or filled job cannot have an application still mid-pipeline after the requisition
+ * itself closed, and none of its transitions can postdate `closedAt` — the JOB_NOTES prose for
+ * UX Researcher and SDR names specific closure events that the rows must agree with. Prefers the
+ * organically-drawn `transitionDates` untouched when they already fit inside
+ * `[transitionDates[0], closedAt]` (appending a `rejected` close-out one day after the last real
+ * stage when the path never reached a terminal one); only when they do not — the rare draw that
+ * runs past `closedAt` — rescales every date onto an even grid ending exactly at `closedAt`,
+ * which keeps the chain strictly increasing without hand-tuning each offender.
+ */
+function closeOutForJobClosure({
+  path,
+  transitionDates,
+  closedAt,
+}: {
+  path: PipelineStageKey[];
+  transitionDates: Date[];
+  closedAt: Date;
+}): { path: PipelineStageKey[]; transitionDates: Date[] } {
+  const needsClosing = !TERMINAL_STAGES.includes(path[path.length - 1]);
+  const finalPath = needsClosing ? [...path, "rejected" as PipelineStageKey] : path;
+
+  const naturalLast = needsClosing
+    ? addDays(transitionDates[transitionDates.length - 1], 1)
+    : transitionDates[transitionDates.length - 1];
+  if (naturalLast.getTime() <= closedAt.getTime()) {
+    const dates = needsClosing ? [...transitionDates, naturalLast] : transitionDates;
+    return { path: finalPath, transitionDates: dates };
+  }
+
+  const stageCount = finalPath.length;
+  const appliedAt = transitionDates[0];
+  const start =
+    appliedAt.getTime() < closedAt.getTime()
+      ? appliedAt.getTime()
+      : closedAt.getTime() - stageCount * HOUR_MS;
+  const span = closedAt.getTime() - start;
+  const dates = Array.from(
+    { length: stageCount },
+    (_, i) => new Date(start + (span * i) / (stageCount - 1)),
+  );
+  return { path: finalPath, transitionDates: dates };
 }
 
 const APPLICATION_SOURCE_WEIGHTS: readonly [NewApplication["source"], number][] = [
@@ -286,9 +340,25 @@ function locationFor(kind: InterviewKindLiteral, rng: () => number): string {
 }
 
 /**
+ * Clamps a candidate `scheduledAt` so an interview can never be dated after the application's
+ * own terminal transition (or after `now`, for a terminal transition that has not — impossibly —
+ * happened yet): a `rejected`/`hired`/`withdrawn` application cannot later acquire an interview
+ * that postdates the decision it would have to justify. Non-terminal applications are untouched,
+ * since a genuinely future `scheduled` interview is a real, intended case (§5 slice 7).
+ */
+function clampToTerminal(plan: ApplicationPlan, now: Date, scheduledAt: Date): Date {
+  const finalStage = plan.path[plan.path.length - 1];
+  if (!TERMINAL_STAGES.includes(finalStage)) return scheduledAt;
+
+  const terminalOccurredAt = plan.transitionDates[plan.transitionDates.length - 1];
+  const ceiling = terminalOccurredAt.getTime() <= now.getTime() ? terminalOccurredAt : now;
+  return scheduledAt.getTime() > ceiling.getTime() ? ceiling : scheduledAt;
+}
+
+/**
  * Builds one interview row anchored to `kind`'s implied stage — `screening` for `phone_screen`,
  * `interview` for every other kind (§5 slice 7) — scheduled at or after the application actually
- * entered that stage.
+ * entered that stage, and never after the application's own terminal transition.
  */
 function buildInterview({
   rng,
@@ -308,7 +378,11 @@ function buildInterview({
   const anchorStage: PipelineStageKey = kind === "phone_screen" ? "screening" : "interview";
   const anchorIndex = plan.path.indexOf(anchorStage);
   const anchorDate = plan.transitionDates[anchorIndex];
-  const scheduledAt = addDays(anchorDate, nextInt(rng, offsetRange[0], offsetRange[1]));
+  const scheduledAt = clampToTerminal(
+    plan,
+    now,
+    addDays(anchorDate, nextInt(rng, offsetRange[0], offsetRange[1])),
+  );
 
   if (scheduledAt > now) {
     return {
@@ -409,6 +483,12 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
       assignment,
     ]),
   );
+  const coverLetterByPair = new Map(
+    COVER_LETTER_ASSIGNMENTS.map((assignment) => [
+      `${assignment.candidateIndex}:${assignment.jobIndex}`,
+      assignment.body,
+    ]),
+  );
 
   const applications: NewApplication[] = [];
   const stageTransitions: NewApplicationStageTransition[] = [];
@@ -417,13 +497,28 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
   pairs.forEach((pair, pairIndex) => {
     const applicationId = nextId(rng);
     const pathKey = pathKeys[pairIndex];
-    const path = PATH_LIBRARY[pathKey];
 
-    const appliedDaysAgo = appliedDaysAgoFor(pathKey, rng);
-    const transitionDates: Date[] = [addDays(now, -appliedDaysAgo)];
-    for (let step = 1; step < path.length; step++) {
-      transitionDates.push(addDays(transitionDates[step - 1], gapDaysFor(path[step], rng)));
+    const appliedDaysAgo = appliedDaysAgoFor(
+      pathKey,
+      JOB_DEFINITIONS[pair.jobIndex].openedDaysAgo,
+      rng,
+    );
+    const rawTransitionDates: Date[] = [addDays(now, -appliedDaysAgo)];
+    const rawPath = PATH_LIBRARY[pathKey];
+    for (let step = 1; step < rawPath.length; step++) {
+      rawTransitionDates.push(
+        addDays(rawTransitionDates[step - 1], gapDaysFor(rawPath[step], rng)),
+      );
     }
+
+    const jobClosedAt = jobs[pair.jobIndex].closedAt;
+    const { path, transitionDates } = jobClosedAt
+      ? closeOutForJobClosure({
+          path: rawPath,
+          transitionDates: rawTransitionDates,
+          closedAt: jobClosedAt,
+        })
+      : { path: rawPath, transitionDates: rawTransitionDates };
 
     path.forEach((stage, step) => {
       const fromStage = step === 0 ? null : path[step - 1];
@@ -456,7 +551,7 @@ export function buildSeedDataset({ now }: { now: Date }): SeedDataset {
       stageChangedAt: transitionDates[transitionDates.length - 1],
       source: sourceFor(rng),
       appliedAt: transitionDates[0],
-      coverLetter: null,
+      coverLetter: coverLetterByPair.get(`${pair.candidateIndex}:${pair.jobIndex}`) ?? null,
       extraction,
     });
 

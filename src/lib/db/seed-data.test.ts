@@ -10,6 +10,7 @@ import { jobs } from "@/lib/db/schema/jobs";
 import { notes } from "@/lib/db/schema/notes";
 import { PIPELINE_STAGE_SEED, type PipelineStageKey } from "@/lib/db/schema/pipeline-stages";
 import { buildSeedDataset, type SeedDataset } from "@/lib/db/seed-data";
+import { COVER_LETTER_ASSIGNMENTS } from "@/lib/db/seed-data-content";
 
 const NOW = new Date("2026-08-18T12:00:00.000Z");
 
@@ -296,9 +297,104 @@ describe("buildSeedDataset — DoD 7: interview/stage coherence", () => {
       expect(application?.stage).not.toBe("applied");
     }
   });
+
+  it("never schedules an interview after its application's own terminal transition", () => {
+    const applicationsById = new Map(
+      dataset.applications.map((application) => [application.id, application]),
+    );
+
+    for (const interview of dataset.interviews) {
+      const application = applicationsById.get(interview.applicationId);
+      expect(application).toBeDefined();
+      if (!TERMINAL_STAGE_KEYS.some((stage) => stage === application!.stage)) continue;
+
+      // `stageChangedAt` is asserted elsewhere to equal the latest transition's `occurredAt` —
+      // this is the terminal transition itself once `application.stage` is terminal.
+      expect(interview.scheduledAt.getTime()).toBeLessThanOrEqual(
+        application!.stageChangedAt!.getTime(),
+      );
+    }
+  });
 });
 
-describe("buildSeedDataset — DoD 8: every row parses against createInsertSchema", () => {
+describe("buildSeedDataset — DoD 8: applications never predate their job", () => {
+  it("every application's applied_at is at or after its job's opened_at", () => {
+    const jobsById = new Map(dataset.jobs.map((job) => [job.id, job]));
+
+    for (const application of dataset.applications) {
+      const job = jobsById.get(application.jobId);
+      expect(job).toBeDefined();
+      expect(application.appliedAt!.getTime()).toBeGreaterThanOrEqual(job!.openedAt!.getTime());
+    }
+  });
+});
+
+describe("buildSeedDataset — DoD 9: closed/filled jobs close out their pipeline", () => {
+  it("every transition on a closed or filled job's applications lands at or before closed_at", () => {
+    const closedJobIds = new Map(
+      dataset.jobs.filter((job) => job.closedAt != null).map((job) => [job.id!, job.closedAt!]),
+    );
+    expect(closedJobIds.size).toBeGreaterThan(0);
+
+    const applicationsById = new Map(
+      dataset.applications.map((application) => [application.id, application]),
+    );
+
+    for (const transition of dataset.stageTransitions) {
+      const application = applicationsById.get(transition.applicationId);
+      const closedAt = application ? closedJobIds.get(application.jobId) : undefined;
+      if (!closedAt) continue;
+
+      expect(transition.occurredAt!.getTime()).toBeLessThanOrEqual(closedAt.getTime());
+    }
+  });
+
+  it("drives every application on a closed or filled job to a terminal stage", () => {
+    const closedJobIds = new Set(
+      dataset.jobs.filter((job) => job.closedAt != null).map((job) => job.id),
+    );
+
+    const affected = dataset.applications.filter((application) =>
+      closedJobIds.has(application.jobId),
+    );
+    expect(affected.length).toBeGreaterThan(0);
+
+    for (const application of affected) {
+      expect(TERMINAL_STAGE_KEYS).toContain(application.stage);
+    }
+  });
+});
+
+describe("buildSeedDataset — DoD 10: cover letters on the intended subset only", () => {
+  it("populates cover_letter on exactly the assigned (candidate, job) pairs", () => {
+    expect(COVER_LETTER_ASSIGNMENTS.length).toBeGreaterThan(0);
+
+    const candidatesById = new Map(
+      dataset.candidates.map((candidate, index) => [candidate.id, index]),
+    );
+    const jobsById = new Map(dataset.jobs.map((job, index) => [job.id, index]));
+    const assignedPairs = new Set(
+      COVER_LETTER_ASSIGNMENTS.map((a) => `${a.candidateIndex}:${a.jobIndex}`),
+    );
+
+    const withCoverLetter = dataset.applications.filter(
+      (application) => application.coverLetter != null,
+    );
+    expect(withCoverLetter.length).toBe(COVER_LETTER_ASSIGNMENTS.length);
+
+    for (const application of dataset.applications) {
+      const pairKey = `${candidatesById.get(application.candidateId)}:${jobsById.get(application.jobId)}`;
+      if (assignedPairs.has(pairKey)) {
+        expect(application.coverLetter).not.toBeNull();
+        expect(application.coverLetter!.length).toBeGreaterThan(0);
+      } else {
+        expect(application.coverLetter).toBeNull();
+      }
+    }
+  });
+});
+
+describe("buildSeedDataset — DoD 12: every row parses against createInsertSchema", () => {
   it("jobs", () => {
     const schema = createInsertSchema(jobs);
     for (const row of dataset.jobs) {
@@ -342,7 +438,7 @@ describe("buildSeedDataset — DoD 8: every row parses against createInsertSchem
   });
 });
 
-describe("buildSeedDataset — DoD 9: candidate emails are unique and lowercase", () => {
+describe("buildSeedDataset — DoD 13: candidate emails are unique and lowercase", () => {
   it("every email is its own lowercase form", () => {
     for (const candidate of dataset.candidates) {
       expect(candidate.email).toBe(candidate.email.toLowerCase());
@@ -358,7 +454,7 @@ describe("buildSeedDataset — DoD 9: candidate emails are unique and lowercase"
   });
 });
 
-describe("buildSeedDataset — DoD 10: prose volume", () => {
+describe("buildSeedDataset — DoD 14: prose volume", () => {
   it("exceeds 50,000 characters across descriptions, resumes, feedback, and notes", () => {
     let characters = 0;
 
@@ -379,7 +475,7 @@ describe("buildSeedDataset — DoD 10: prose volume", () => {
   });
 });
 
-describe("buildSeedDataset — DoD 11: determinism", () => {
+describe("buildSeedDataset — DoD 15: determinism", () => {
   it("returns a deep-equal dataset when called twice with the same now", () => {
     const again = buildSeedDataset({ now: NOW });
     expect(again).toEqual(dataset);
