@@ -11,8 +11,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { ExtractionPayload } from "@/extraction";
-
+// Relative, not `@/extraction`: this module is reachable from `./client`, which `apps/web`
+// compiles, and there `@/*` resolves against the web app's own `src/`. See `client.ts`.
+import type { ExtractionPayload } from "../extraction";
 import { candidates } from "./candidates";
 import { applicationSource } from "./enums";
 import { jobs } from "./jobs";

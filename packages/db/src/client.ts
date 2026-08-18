@@ -1,15 +1,19 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { env } from "@/env";
-import { applicationStageTransitions } from "@/schema/application-stage-transitions";
-import { applications } from "@/schema/applications";
-import { candidates } from "@/schema/candidates";
-import { interviews } from "@/schema/interviews";
-import { jobs } from "@/schema/jobs";
-import { notes } from "@/schema/notes";
-import { pipelineStages } from "@/schema/pipeline-stages";
-import * as relations from "@/schema/relations";
+// Relative, not `@/*`: TypeScript resolves `paths` for the whole program, so inside `apps/web`'s
+// compilation `@/schema/jobs` remaps to `apps/web/src/schema/jobs` and every import here fails —
+// `@/env` worst of all, because it silently binds to the web app's env module instead of erroring.
+// Every module reachable from this one must stay relative for the same reason.
+import { env } from "./env";
+import { applicationStageTransitions } from "./schema/application-stage-transitions";
+import { applications } from "./schema/applications";
+import { candidates } from "./schema/candidates";
+import { interviews } from "./schema/interviews";
+import { jobs } from "./schema/jobs";
+import { notes } from "./schema/notes";
+import { pipelineStages } from "./schema/pipeline-stages";
+import * as relations from "./schema/relations";
 
 /**
  * Every table and every `relations()` declaration, in the shape Drizzle's query builder expects.
