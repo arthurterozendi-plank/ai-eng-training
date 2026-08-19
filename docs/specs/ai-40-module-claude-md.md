@@ -3,10 +3,11 @@
 **Linear:** AI-40 · Type: Chore · Parent: AI-9 · Milestone: Week 1 — Use AI: Workflow
 **Branch:** `arthurterozendi/ai-40-document-module-level-conventions-in-folder-claudemd-files`
 (worktree `ai-eng-training-ai-40-module-claudemd`, based on `origin/main` at `09d0742`)
-**Status:** specced; hardened rounds 1–3 (CHANGES_REQUESTED each; all sixteen findings
-dispositioned in §7.1–7.3). The r3 BLOCKER — that the subtree-load premise was inferred rather
-than measured — was settled by direct probe and the premise **holds**; §2 now cites the
-experiment. Implemented; addressing review-round-1 findings. No blocking escalations.
+**Status:** implemented and reviewer-**APPROVED** at review round 2. Hardened over four critique
+rounds (§7.1–7.4); the r3 BLOCKER — that the subtree-load premise was inferred rather than
+measured — was settled by direct probe and the premise **holds**, and §2 now cites the experiment.
+Review round 1 returned two BLOCKERs, both fixed; round 2 approved with SHOULD/NIT findings, which
+were applied as well. No blocking escalations.
 
 ---
 

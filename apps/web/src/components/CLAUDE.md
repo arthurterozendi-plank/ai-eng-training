@@ -15,11 +15,11 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-type StatusBadgeProps = React.ComponentProps<"span"> & {
-  status: "open" | "closed";
-};
-
-function StatusBadge({ status, className, ...props }: StatusBadgeProps) {
+function StatusBadge({
+  status,
+  className,
+  ...props
+}: React.ComponentProps<"span"> & { status: "open" | "closed" }) {
   return (
     <span
       className={cn(
@@ -38,9 +38,10 @@ export { StatusBadge };
 
 The one contract the root does not state: destructure `className`, merge it **last** through
 `cn(base, className)` so a caller's class wins a Tailwind conflict, and spread `...props` onto the
-root element so any prop the intrinsic tag accepts still works. Both components that take a
+root element so the intrinsic tag's own props keep working. Both of our components that take a
 `className` do this (`job-card.tsx:13-25`, `candidate-profile.tsx:63-68`); `settings-form` takes no
-props and `theme-toggle` forwards to `<Button>` without merging one of its own.
+props and `theme-toggle` forwards to `<Button>` without merging one of its own. The `ui/`
+primitives differ — `button.tsx:61` routes `className` through `cva`, which is theirs alone.
 
 ## B. Local facts
 
@@ -95,8 +96,8 @@ The push-down this proves: `settings/page.tsx` is a Server Component whose only 
 
 ## F. Do not
 
-- Check the module itself, not its children, for whether `"use client"` is needed — a Server
-  Component may render a Client Component.
+- Do not treat a client-only child as reason to mark its parent — a Server Component may render
+  a Client Component.
 - Do not sort, `push`, `splice`, or otherwise mutate an array that arrived as a prop. Copy it
   first, and tie-break the sort so rows with equal keys render in the same order every time
   instead of depending on input order (`candidate-profile.tsx:57-58,105-110`).
