@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "mcp": "dotenv -e ../../.env.local -- tsx src/main.ts",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "typecheck": "tsc --noEmit",
