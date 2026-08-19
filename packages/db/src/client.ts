@@ -1,10 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-// Relative, not `@/*`: TypeScript resolves `paths` for the whole program, so inside `apps/web`'s
-// compilation `@/schema/jobs` remaps to `apps/web/src/schema/jobs` and every import here fails —
-// `@/env` worst of all, because it silently binds to the web app's env module instead of erroring.
-// Every module reachable from this one must stay relative for the same reason.
 import { env } from "./env";
 import { applicationStageTransitions } from "./schema/application-stage-transitions";
 import { applications } from "./schema/applications";
