@@ -1,5 +1,7 @@
 import postgres from "postgres";
 
+import type { QueryRows } from "./server";
+
 /**
  * Statement timeout applied inside every read-only transaction, in milliseconds. Every honest
  * query against this database's ~627 rows returns in milliseconds; 10s sits well inside Claude
@@ -25,8 +27,14 @@ export const STATEMENT_TIMEOUT_MS = 10_000;
  * otherwise write an unframed line straight into the response stream with no query needed.
  * Redirecting it to `console.error` keeps the notice text visible for debugging without
  * corrupting stdout.
+ *
+ * Annotated as `postgres.Options<{}>`, not left as an inferred literal (AI-43 review, NIT): an
+ * untyped object reaches `postgres()` as a variable, where excess-property checking never fires,
+ * so land-mine 1c's exact typo — a top-level `options` instead of nested `connection.options` —
+ * still typechecked. With the annotation, `tsc` rejects it directly, becoming a third check
+ * alongside `read-only.test.ts`'s placement assertion and `mcp:verify`'s live GUC assertion.
  */
-export const READ_ONLY_CONNECTION_OPTIONS = {
+export const READ_ONLY_CONNECTION_OPTIONS: postgres.Options<Record<string, never>> = {
   connection: {
     options: "-c default_transaction_read_only=on",
   },
@@ -37,9 +45,54 @@ export const READ_ONLY_CONNECTION_OPTIONS = {
 };
 
 /**
+ * Rebuilds one `Record<string, unknown>` per row from postgres.js's own ordered `columns` list
+ * and its positional `.values()` output, rather than trusting postgres.js's default row-building
+ * (`row[column.name] = value` for each column in order, verified at
+ * `node_modules/postgres/src/connection.js`'s `DataRow` handler). That default silently collapses
+ * two columns sharing a name — the later one overwrites the earlier — with no error and no
+ * notice; every table in this schema carries `id` / `created_at` / `updated_at`, so any two-table
+ * join hits it, and `select *` over a join is the most likely exploratory query an agent writes
+ * (AI-43 review, BLOCKER). A name that repeats here instead gets a numbered suffix (`id`, `id__2`,
+ * `id__3`, …), so no value is lost and none is misattributed to the wrong column.
+ * `duplicateColumns` — empty in the overwhelmingly common no-collision case — names every column
+ * that collided, in first-seen order, so `src/format.ts`'s renderer can say so in `query`'s
+ * header. Every statement `src/catalog.ts` sends selects controlled, unique column names, so this
+ * function is a plain, unchanged transcription for every catalog caller.
+ */
+function buildRows(
+  columns: readonly { name: string }[],
+  valueRows: readonly unknown[][],
+): QueryRows {
+  const seen = new Map<string, number>();
+  const names = columns.map((column) => {
+    const count = (seen.get(column.name) ?? 0) + 1;
+    seen.set(column.name, count);
+    return count === 1 ? column.name : `${column.name}__${count}`;
+  });
+
+  const duplicateColumns = [...seen.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([name]) => name);
+
+  const rows = valueRows.map((values) => {
+    const row: Record<string, unknown> = {};
+    names.forEach((name, index) => {
+      row[name] = values[index];
+    });
+    return row;
+  }) as QueryRows;
+
+  if (duplicateColumns.length > 0) {
+    rows.duplicateColumns = duplicateColumns;
+  }
+
+  return rows;
+}
+
+/**
  * Runs exactly one statement against `sql` inside a read-only transaction, returning its rows.
  *
- * Four details each carry a measured security property and must not move:
+ * Five details each carry a measured security or correctness property and must not move:
  * - `RESET ALL` runs **before** opening the transaction, not after — a call that throws would
  *   skip an after-the-fact cleanup exactly when a poisoned session (a prior `SET SESSION
  *   default_transaction_read_only = off`) needs reversing.
@@ -55,6 +108,9 @@ export const READ_ONLY_CONNECTION_OPTIONS = {
  *   `{ simple: false }` explicitly, even when `params` is `undefined`. postgres.js otherwise
  *   defaults to the simple query protocol at zero arguments, which lets a payload starting
  *   `commit;` end the transaction and run a second statement in the same round trip.
+ * - The statement runs with `.values()`, not the plain object form, so this function sees
+ *   postgres.js's positional rows and its own ordered `columns` list — the only way to detect and
+ *   rename a repeated column name before it collides (see {@link buildRows}).
  *
  * Takes the postgres instance as an argument, rather than opening one itself, so the mechanism
  * is unit-testable with a fake `sql`. {@link createReadOnlyExecutor} is the thin wrapper that
@@ -64,11 +120,11 @@ export async function runReadOnly(
   sql: postgres.Sql,
   statement: string,
   params?: unknown[],
-): Promise<Record<string, unknown>[]> {
+): Promise<QueryRows> {
   await sql.unsafe("reset all", [], { simple: false });
   await sql.unsafe("select pg_advisory_unlock_all()", [], { simple: false });
 
-  const rows = await sql.begin("read only", async (tx) => {
+  const { columns, values } = await sql.begin("read only", async (tx) => {
     await tx.unsafe(`set local statement_timeout = ${STATEMENT_TIMEOUT_MS}`, [], {
       simple: false,
     });
@@ -76,25 +132,29 @@ export async function runReadOnly(
     // Tool arguments arrive as `unknown[]` — validated by the caller's zod schema, not by
     // postgres.js's own parameter types, which this cast bridges at the one place params reach
     // the driver.
-    return tx.unsafe<Record<string, unknown>[]>(
-      statement,
-      (params ?? []) as postgres.ParameterOrJSON<never>[],
-      { simple: false },
-    );
+    const values = await tx
+      .unsafe<Record<string, unknown>[]>(
+        statement,
+        (params ?? []) as postgres.ParameterOrJSON<never>[],
+        { simple: false },
+      )
+      .values();
+
+    return { columns: values.columns, values };
   });
 
-  return rows;
+  return buildRows(columns, values);
 }
 
 /**
  * Opens a real, pinned, forced-read-only connection to `connectionString` and returns a
- * `(statement, params?) => Promise<Record<string, unknown>[]>` executor over it — the shape
- * `src/server.ts`'s `QueryExecutor` contract expects. The thin counterpart to
- * {@link runReadOnly}: this is the only place in the module that calls `postgres()` for real.
+ * `(statement, params?) => Promise<QueryRows>` executor over it — the shape `src/server.ts`'s
+ * `QueryExecutor` contract expects. The thin counterpart to {@link runReadOnly}: this is the only
+ * place in the module that calls `postgres()` for real.
  */
 export function createReadOnlyExecutor(
   connectionString: string,
-): (statement: string, params?: unknown[]) => Promise<Record<string, unknown>[]> {
+): (statement: string, params?: unknown[]) => Promise<QueryRows> {
   const sql = postgres(connectionString, READ_ONLY_CONNECTION_OPTIONS);
 
   return (statement, params) => runReadOnly(sql, statement, params);

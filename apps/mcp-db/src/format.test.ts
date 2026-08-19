@@ -7,6 +7,7 @@ import {
   MAX_ROWS_CEILING,
   MAX_ROWS_DEFAULT,
   SAMPLE_ROWS_DEFAULT,
+  SAMPLE_ROWS_MAX,
 } from "@/format";
 
 describe("constants", () => {
@@ -17,6 +18,7 @@ describe("constants", () => {
     expect(MAX_ROWS_DEFAULT).toBe(100);
     expect(MAX_ROWS_CEILING).toBe(1000);
     expect(SAMPLE_ROWS_DEFAULT).toBe(5);
+    expect(SAMPLE_ROWS_MAX).toBe(20);
   });
 });
 
@@ -54,6 +56,26 @@ describe("formatRowsNotice", () => {
     const notice = formatRowsNotice(101, 100);
     expect(notice.toLowerCase()).toContain("truncat");
   });
+
+  it("says nothing about duplicates when none are given — the overwhelmingly common case", () => {
+    const notice = formatRowsNotice(3, 100, []);
+    expect(notice).toBe("3 rows.");
+  });
+
+  it("names every disambiguated column, singular for one (AI-43 review, BLOCKER)", () => {
+    const notice = formatRowsNotice(3, 100, ["id"]);
+    expect(notice).toContain("3 rows.");
+    expect(notice).toContain("id");
+    expect(notice).toMatch(/\bcolumn\b/);
+    expect(notice).not.toMatch(/\bcolumns\b/);
+  });
+
+  it("uses the plural for more than one disambiguated column", () => {
+    const notice = formatRowsNotice(3, 100, ["id", "created_at"]);
+    expect(notice).toContain("id");
+    expect(notice).toContain("created_at");
+    expect(notice).toMatch(/\bcolumns\b/);
+  });
 });
 
 describe("formatQueryResult", () => {
@@ -78,6 +100,16 @@ describe("formatQueryResult", () => {
     expect(parsed).toHaveLength(100);
     expect(parsed[0]).toEqual({ id: 0 });
     expect(parsed[99]).toEqual({ id: 99 });
+  });
+
+  it("states which columns were disambiguated when the caller reports one (AI-43 review, BLOCKER)", () => {
+    const rows = [{ id: "a", id__2: "b" }];
+
+    const text = formatQueryResult(rows, MAX_ROWS_DEFAULT, ["id"]);
+    const [notice] = text.split("\n\n");
+
+    expect(notice).toContain("id");
+    expect(text).toContain('"id__2"');
   });
 });
 

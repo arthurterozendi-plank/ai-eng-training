@@ -32,7 +32,24 @@ import {
   MAX_ROWS_CEILING,
   MAX_ROWS_DEFAULT,
   SAMPLE_ROWS_DEFAULT,
+  SAMPLE_ROWS_MAX,
 } from "./format";
+
+/**
+ * The rows a {@link QueryExecutor} resolves with: a `Record<string, unknown>` per row, plus an
+ * optional `duplicateColumns` naming any column whose name collided with an earlier one in the
+ * same result and was renamed to survive (`id`, `id__2`, …) instead of silently overwriting it —
+ * postgres.js's own row-building keys each row by column name, so a repeated name (any two-table
+ * join here: every table carries `id` / `created_at` / `updated_at`) collapses to one value with
+ * no error (AI-43 review, BLOCKER). `src/read-only.ts`'s `runReadOnly` is the only producer;
+ * every catalog statement in `src/catalog.ts` selects controlled, unique column names, so
+ * `duplicateColumns` is always absent there and no catalog caller needs to change. The property
+ * is optional, not required, so a plain `Record<string, unknown>[]` — every fake `execute` this
+ * file's tests use — still satisfies the type.
+ */
+export interface QueryRows extends Array<Record<string, unknown>> {
+  duplicateColumns?: readonly string[];
+}
 
 /**
  * Runs one SQL statement over a read-only connection and returns its rows. This is the seam
@@ -40,10 +57,7 @@ import {
  * no stream — and `src/read-only.ts` / `src/main.ts`, which own the real connection. It is what
  * makes the tool surface here testable with `InMemoryTransport` and a fake `execute` (AI-43 §4).
  */
-export type QueryExecutor = (
-  statement: string,
-  params?: unknown[],
-) => Promise<Record<string, unknown>[]>;
+export type QueryExecutor = (statement: string, params?: unknown[]) => Promise<QueryRows>;
 
 /**
  * The MCP tool annotations every tool in this server carries. Read-only enforcement lives
@@ -104,14 +118,10 @@ export function createServer(execute: QueryExecutor): McpServer {
     async ({ sql, maxRows }) => {
       try {
         const rows = await execute(sql);
-        return {
-          content: [{ type: "text", text: formatQueryResult(rows, maxRows ?? MAX_ROWS_DEFAULT) }],
-        };
+        const text = formatQueryResult(rows, maxRows ?? MAX_ROWS_DEFAULT, rows.duplicateColumns);
+        return { content: [{ type: "text", text }] };
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: formatQueryError(error) }],
-        };
+        return toErrorResult(error);
       }
     },
   );
@@ -171,7 +181,7 @@ export function createServer(execute: QueryExecutor): McpServer {
         "live from the catalog, never an estimate.",
       inputSchema: {
         table: z.string().min(1),
-        sampleRows: z.int().min(0).max(20).optional(),
+        sampleRows: z.int().min(0).max(SAMPLE_ROWS_MAX).optional(),
       },
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -181,6 +191,12 @@ export function createServer(execute: QueryExecutor): McpServer {
         const quotedTable = quoteValidatedTableName(table, validTables);
 
         const limit = sampleRows ?? SAMPLE_ROWS_DEFAULT;
+        // Accepted, not fixed (AI-43 review): `countRows` and `sampleRowsResult` each open their
+        // own `runReadOnly` transaction, so they are two separate snapshots, not one — a
+        // concurrent write between them could make `rowCount` and `sampleRows` disagree.
+        // Fixing it needs `runReadOnly` to take a callback or a statement list, which is a
+        // larger change than this round carries; the `tables` resource below has the same gap
+        // across its per-table counts.
         const [columnRows, countRows, sampleRowsResult] = await Promise.all([
           execute(COLUMNS_SQL, [[table]]) as unknown as Promise<ColumnRow[]>,
           execute(countRowsSql(quotedTable)),
@@ -221,6 +237,10 @@ export function createServer(execute: QueryExecutor): McpServer {
           shapeColumns(columnRows).map((table) => [table.table, table.columns.length]),
         );
 
+        // Accepted, not fixed (AI-43 review): each table's count below opens its own
+        // `runReadOnly` transaction, so the per-table counts are separate snapshots of a
+        // database that can change between them — the same gap `describe-table` above has
+        // between its `rowCount` and `sampleRows`.
         const tables = await Promise.all(
           validTables.map(async (table) => {
             const quotedTable = quoteValidatedTableName(table, validTables);

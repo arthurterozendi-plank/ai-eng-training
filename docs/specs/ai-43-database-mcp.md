@@ -1073,14 +1073,24 @@ that makes `packages/db/src/schema/relations.ts`'s comment stale — slice 8 fix
 
 **YELLOW-7 — Results cap at 100 rows by default, overridable per call to 1000, with the exact total
 stated.** Measured row sizes span 149 B (`pipeline_stages`) to 1682 B (`jobs`); a 100-row page of
-the largest table is ~29 KB, and the whole largest table uncapped is 87 KB. 100 is the point where a
-page is still a useful sample and not a context-window event. The total is exact and free —
-postgres.js materialises the result set, so `rows.length` is known before truncation, which is why
-the notice can say "of 299" rather than "more were available". _Rejected:_ wrapping the user's SQL
-in `select * from (…) limit n` — it breaks on trailing semicolons, `explain`, `show` and `copy`, and
-buys nothing given the count is already free. _Rejected:_ a byte budget alongside the row cap — a
-second mechanism for a tail case the measurements do not show (the largest full-table payload here
-is 87 KB); RISK-3 records the trigger for adding it.
+`application_stage_transitions` (the table with the most rows, 299) is ~29 KB, and the whole table
+uncapped is 87 KB. 100 is the point where a page is still a useful sample and not a context-window
+event. The total is exact and free — postgres.js materialises the result set, so `rows.length` is
+known before truncation, which is why the notice can say "of 299" rather than "more were
+available". _Rejected:_ wrapping the user's SQL in `select * from (…) limit n` — it breaks on
+trailing semicolons, `explain`, `show` and `copy`, and buys nothing given the count is already
+free. _Rejected (at the time):_ a byte budget alongside the row cap — RISK-3 records the trigger
+for adding it, and the correction below records that the trigger has since been met.
+
+_Correction (review AI-43, NIT):_ "the largest table" above is `application_stage_transitions` by
+**row count**, not by **row width**, and the 87 KB figure is that table's alone. It is not the
+widest table per row: measured on the live seed, `candidates` (60 rows) is ~56 KB
+(~940 B/row) and `notes` (120 rows, itself over the default cap) is ~43 KB — both meaningfully
+above the ~29 KB a reader would extrapolate from `application_stage_transitions`' 289 B/row. A
+default-capped `select * from candidates` alone already returns most of RISK-3's ~100 KB trigger;
+see RISK-3 for the resulting status. The cap itself is unchanged by this correction — it bounds
+rows, not bytes, by design (see RISK-3) — only the estimate that justified deferring a byte budget
+was too optimistic.
 
 **YELLOW-8 — One `text` content block per tool result: a header line, a blank line, then
 `JSON.stringify(rows, null, 2)`.** Agents read text; JSON is the least ambiguous rendering of a
@@ -1370,10 +1380,16 @@ section added to slice 8.
    Nothing in the type system distinguishes them; only slice 7's
    `show default_transaction_read_only` assertion does.
 4. **RISK-3 — the cap counts rows, not bytes, and it counts _output_ rows, not work.** 100 rows of
-   `pipeline_stages` is 15 KB; 100 rows of a wide join could be 200 KB. The measurements do not
-   justify a byte budget today — the largest full-table payload on this database is 87 KB — but the
-   trigger for adding one is concrete: the first time a real query returns over ~100 KB of text,
-   add a character budget beside the row cap and state both in the notice. Separately, and noted in
+   `pipeline_stages` is 15 KB; 100 rows of a wide join could be 200 KB. The trigger for adding a
+   byte budget is concrete: the first time a real query returns over ~100 KB of text, add a
+   character budget beside the row cap and state both in the notice. **Trigger met (review AI-43,
+   NIT; see YELLOW-7's correction):** `candidates` and `notes` are wider per row than the estimate
+   this trigger was originally judged against, and an uncapped `select *` on this database's
+   largest table (`application_stage_transitions`, `maxRows` raised to its 1000 ceiling) already
+   renders over 100 KB as `JSON.stringify(rows, null, 2)`. **Not acted on in this round** — adding
+   a byte budget is a larger, separable change (a new constant, a second truncation reason in the
+   notice, tests for the interaction between the two caps) than this fix carries; recorded here for
+   a follow-up to pick up. Separately, and noted in
    harden round 2: because postgres.js materialises the whole result set before the cut (which is
    what makes the exact total free), the cap bounds **what is returned, not what is pulled**.
    `select … from generate_series(1, 10_000_000)` or an accidental cartesian join buffers in the

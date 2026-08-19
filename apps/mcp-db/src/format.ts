@@ -17,20 +17,39 @@ export const MAX_ROWS_CEILING = 1000;
  */
 export const SAMPLE_ROWS_DEFAULT = 5;
 
+/** The ceiling a caller can raise `describe-table`'s `sampleRows` to on a single call. */
+export const SAMPLE_ROWS_MAX = 20;
+
 /**
  * Renders the header a `query` result opens with: the exact total, and — only when the result
  * was actually cut — how many rows are shown and the cap that produced the cut. The total is
  * never an estimate: postgres.js materialises the whole result set before this function ever
  * sees it, so `totalRows` is exact even when the response is truncated (AI-43 §4, YELLOW-7).
+ *
+ * `duplicateColumns` names every column whose name collided with an earlier one in the same
+ * result and was renamed to survive (`id`, `id__2`, …) rather than being silently overwritten —
+ * see `read-only.ts`'s `buildRows` (AI-43 review, BLOCKER). Empty for the overwhelmingly common
+ * no-collision case, which leaves this notice exactly as it was before that fix.
  */
-export function formatRowsNotice(totalRows: number, maxRows: number): string {
-  if (totalRows <= maxRows) {
-    return `${totalRows} ${totalRows === 1 ? "row" : "rows"}.`;
+export function formatRowsNotice(
+  totalRows: number,
+  maxRows: number,
+  duplicateColumns: readonly string[] = [],
+): string {
+  const countNotice =
+    totalRows <= maxRows
+      ? `${totalRows} ${totalRows === 1 ? "row" : "rows"}.`
+      : `Showing ${maxRows} of ${totalRows} rows — truncated at maxRows=${maxRows}. ` +
+        `Pass a larger \`maxRows\` (up to ${MAX_ROWS_CEILING}) or narrow the query to see more.`;
+
+  if (duplicateColumns.length === 0) {
+    return countNotice;
   }
 
+  const plural = duplicateColumns.length === 1 ? "column" : "columns";
   return (
-    `Showing ${maxRows} of ${totalRows} rows — truncated at maxRows=${maxRows}. ` +
-    `Pass a larger \`maxRows\` (up to ${MAX_ROWS_CEILING}) or narrow the query to see more.`
+    `${countNotice} Repeated ${plural} renamed to avoid overwriting an earlier value — see the ` +
+    `"__2" suffix below: ${duplicateColumns.join(", ")}.`
   );
 }
 
@@ -39,9 +58,13 @@ export function formatRowsNotice(totalRows: number, maxRows: number): string {
  * header, a blank line, then the shown rows as `JSON.stringify(rows, null, 2)` — pretty-printed
  * because that costs bytes but keeps column names greppable (YELLOW-8).
  */
-export function formatQueryResult(rows: Record<string, unknown>[], maxRows: number): string {
+export function formatQueryResult(
+  rows: Record<string, unknown>[],
+  maxRows: number,
+  duplicateColumns: readonly string[] = [],
+): string {
   const shownRows = rows.slice(0, maxRows);
-  const notice = formatRowsNotice(rows.length, maxRows);
+  const notice = formatRowsNotice(rows.length, maxRows, duplicateColumns);
 
   return `${notice}\n\n${JSON.stringify(shownRows, null, 2)}`;
 }

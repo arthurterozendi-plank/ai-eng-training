@@ -210,6 +210,110 @@ async function checkTimeout(execute: QueryExecutor): Promise<CaseResult> {
 }
 
 /**
+ * Compares two values the way {@link buildRows}-equivalent output must: `postgres.js` parses a
+ * `timestamptz` column into a `Date`, and two distinct `Date` instances for the same instant are
+ * never `===`, so this reproduction compares by value rather than by reference.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+  return a === b;
+}
+
+/**
+ * The BLOCKER regression (AI-43 review): postgres.js builds each row as a JS object keyed by
+ * column name (`node_modules/postgres/src/connection.js`'s `DataRow` handler), so two columns
+ * sharing a name collide — the later one silently overwrites the earlier — and `formatQueryResult`
+ * then renders the survivor as if it belonged to every colliding column. No error, no notice, and
+ * the header still reports the full row count. Every table in this schema carries
+ * `id` / `created_at` / `updated_at`, so *any* two-table join hits it, and `select *` over a join
+ * is the most likely exploratory query an agent writes.
+ *
+ * Both reproductions below are the exact statements from the review report. A "truth" query using
+ * aliases (never ambiguous, so it never collides) reads the same values independently, so this
+ * does not just count keys — it confirms the surviving value is attributed to the *right* column,
+ * not merely that some value is present. Confirmed to fail before the fix — the four-column case
+ * rendered 3 keys with `id` holding the candidate's id; the `select *` case rendered one `id`
+ * equal to `jobs.id`, with `applications.id`, `applications.created_at` and
+ * `applications.updated_at` gone — and to pass after it.
+ */
+async function checkDuplicateColumnsSurvive(execute: QueryExecutor): Promise<CaseResult[]> {
+  const results: CaseResult[] = [];
+
+  {
+    const name =
+      'BLOCKER: "select j.id, j.title, c.id, c.full_name from … join …" renders four columns, not three';
+    const [truth] = await execute(
+      `select j.id as job_id, c.id as candidate_id
+       from applications a
+       join jobs j on j.id = a.job_id
+       join candidates c on c.id = a.candidate_id
+       limit 1`,
+    );
+    const [row] = await execute(
+      `select j.id, j.title, c.id, c.full_name
+       from applications a
+       join jobs j on j.id = a.job_id
+       join candidates c on c.id = a.candidate_id
+       limit 1`,
+    );
+    const keys = row ? Object.keys(row) : [];
+
+    const ok =
+      keys.length === 4 &&
+      !!truth &&
+      !!row &&
+      sameValue(row.id, truth.job_id) &&
+      sameValue(row.id__2, truth.candidate_id) &&
+      !sameValue(truth.job_id, truth.candidate_id);
+
+    results.push(
+      ok
+        ? pass(name, `rendered keys: ${keys.join(", ")}; id -> job, id__2 -> candidate`)
+        : fail(name, `rendered keys: ${keys.join(", ")}; row: ${JSON.stringify(row)}`),
+    );
+  }
+
+  {
+    const name =
+      'BLOCKER: "select * from applications a join jobs j on j.id = a.job_id limit 1" keeps ' +
+      "both tables' id/created_at/updated_at";
+    const [truth] = await execute(
+      `select a.id as app_id, j.id as job_id, a.created_at as app_created_at,
+              j.created_at as job_created_at, a.updated_at as app_updated_at,
+              j.updated_at as job_updated_at
+       from applications a
+       join jobs j on j.id = a.job_id
+       limit 1`,
+    );
+    const [row] = await execute(
+      `select * from applications a join jobs j on j.id = a.job_id limit 1`,
+    );
+    const keys = row ? Object.keys(row) : [];
+
+    const ok =
+      keys.length === 23 &&
+      !!truth &&
+      !!row &&
+      sameValue(row.id, truth.app_id) &&
+      sameValue(row.id__2, truth.job_id) &&
+      sameValue(row.created_at, truth.app_created_at) &&
+      sameValue(row.created_at__2, truth.job_created_at) &&
+      sameValue(row.updated_at, truth.app_updated_at) &&
+      sameValue(row.updated_at__2, truth.job_updated_at);
+
+    results.push(
+      ok
+        ? pass(name, `rendered ${keys.length} keys; applications.id survived as "id"`)
+        : fail(name, `rendered keys: ${keys.join(", ")}; row: ${JSON.stringify(row)}`),
+    );
+  }
+
+  return results;
+}
+
+/**
  * AC 1's real witness: 60 is written down nowhere in this repository, so a schema-file answer
  * cannot produce it — only a real query against the seeded database can.
  */
@@ -558,6 +662,7 @@ async function main(): Promise<void> {
     results.push(...(await checkPoisoningDoesNotStick(execute)));
     results.push(await checkAdvisoryLockReleasedBetweenCalls(execute));
     results.push(await checkTimeout(execute));
+    results.push(...(await checkDuplicateColumnsSurvive(execute)));
     results.push(await checkCandidateCountWitness(execute));
     results.push(...(await checkCatalogWitness(execute)));
     results.push(await checkMalformedQueryWitness(execute));

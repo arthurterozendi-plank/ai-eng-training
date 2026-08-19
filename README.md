@@ -280,10 +280,10 @@ real Chrome for navigation, DOM inspection, console logs, network traces, and pe
 would otherwise have to guess from: `query` runs arbitrary SQL, `schema` and `describe-table` read
 the Postgres catalog directly — so triggers, enum types and FK delete actions that no Drizzle file
 describes are visible too — and the `talentscout://tables` resource lists every table with its
-column and row counts. It is **read-only by construction, not by prompt instruction**: every
-statement runs inside `BEGIN READ ONLY` over the extended query protocol, which is what stops a
-payload like `commit; drop table jobs` from smuggling a second statement past the transaction — a
-bare `BEGIN READ ONLY` alone does not catch that. Read-only means no writes, not no side effects —
+column and row counts. It is **read-only by construction, not by prompt instruction**: the SQL you
+send runs inside `BEGIN READ ONLY` over the extended query protocol, which is what stops a payload
+like `commit; drop table jobs` from smuggling a second statement past the transaction — a bare
+`BEGIN READ ONLY` alone does not catch that. Read-only means no writes, not no side effects —
 a statement can still take a lock or signal another backend, so every call resets session state and
 releases advisory locks before it runs. `query` results are capped at 100 rows by default, with the
 exact total always stated and a per-call `maxRows` override up to 1000.
