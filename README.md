@@ -85,9 +85,9 @@ apps/
     src/
       app/                App Router routes, layouts, route handlers
         api/
-          CLAUDE.md       Route handler conventions — see "Two convention tiers" below
+          CLAUDE.md       Route handler conventions
       components/         Shared React components
-        CLAUDE.md         Component conventions — see "Two convention tiers" below
+        CLAUDE.md         Component conventions
         ui/               shadcn/ui primitives (generated — edit freely, they are yours)
       hooks/              Client-side React hooks
       lib/                Framework-agnostic helpers (cn, formatters)

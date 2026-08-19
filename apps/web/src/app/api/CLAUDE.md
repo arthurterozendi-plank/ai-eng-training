@@ -2,8 +2,7 @@
 
 The root `CLAUDE.md` holds the rules for this folder. What follows is what the root leaves out: a
 worked skeleton, the decisions the two real routes answer differently, and where agents actually
-go wrong. This file loads when Claude reads any file in this directory's subtree — `status/`,
-`jobs/` and `candidates/[id]/` included, even though no source file sits directly in this folder.
+go wrong.
 
 ## A — the skeleton
 
