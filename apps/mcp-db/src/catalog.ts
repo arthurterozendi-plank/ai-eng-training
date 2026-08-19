@@ -315,6 +315,15 @@ export function assertKnownTables(tables: string[], validTables: string[]): void
  * appeared there never reaches a statement string at all; what survives is double-quoted, the
  * quote itself doubled defensively even though a name drawn from `pg_class.relname` can never
  * carry one.
+ *
+ * Accepted, not fixed (AI-43 review round 4): the identifier this returns is unqualified, so
+ * `countRowsSql` / `sampleRowsSql` resolve it through the connection's `search_path`, while
+ * {@link TABLE_NAMES_SQL} — the catalog `validTables` is drawn from — filters `nspname = 'public'`
+ * specifically. A same-named relation earlier on `search_path` than `public` would be counted or
+ * sampled instead of the validated table. Not reachable today: `runReadOnly`'s `BEGIN READ ONLY`
+ * blocks creating even a temp table, and the default `search_path` is `"$user", public` with no
+ * schema between them. Schema-qualifying (`public."name"`) would close this outright; left to a
+ * follow-up rather than folded into this round.
  */
 export function quoteValidatedTableName(table: string, validTables: string[]): string {
   assertKnownTables([table], validTables);

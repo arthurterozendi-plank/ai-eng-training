@@ -53,26 +53,43 @@ export const READ_ONLY_CONNECTION_OPTIONS: postgres.Options<Record<string, never
  * notice; every table in this schema carries `id` / `created_at` / `updated_at`, so any two-table
  * join hits it, and `select *` over a join is the most likely exploratory query an agent writes
  * (AI-43 review, BLOCKER). A name that repeats here instead gets a numbered suffix (`id`, `id__2`,
- * `id__3`, …), so no value is lost and none is misattributed to the wrong column.
- * `duplicateColumns` — empty in the overwhelmingly common no-collision case — names every column
- * that collided, in first-seen order, so `src/format.ts`'s renderer can say so in `query`'s
- * header. Every statement `src/catalog.ts` sends selects controlled, unique column names, so this
- * function is a plain, unchanged transcription for every catalog caller.
+ * `id__3`, …), chosen by probing against every source column name *and* every name already
+ * emitted — not a blind per-name counter — so a suffix can never collide with a real column
+ * already carrying it: `select 1 as id, 2 as id__2, 3 as id` would otherwise rename the second
+ * `id` to `id__2`, colliding with the real `id__2` and silently overwriting it, the exact failure
+ * class this function exists to prevent, one level up (AI-43 review round 4, SHOULD 2). So no
+ * value is lost and none is misattributed to the wrong column. `duplicateColumns` — empty in the
+ * overwhelmingly common no-collision case — names every *source* column name that repeated, in
+ * first-seen order, so `src/format.ts`'s renderer can say so in `query`'s header. Every statement
+ * `src/catalog.ts` sends selects controlled, unique column names, so this function is a plain,
+ * unchanged transcription for every catalog caller.
  */
 function buildRows(
   columns: readonly { name: string }[],
   valueRows: readonly unknown[][],
 ): QueryRows {
-  const seen = new Map<string, number>();
-  const names = columns.map((column) => {
-    const count = (seen.get(column.name) ?? 0) + 1;
-    seen.set(column.name, count);
-    return count === 1 ? column.name : `${column.name}__${count}`;
-  });
+  const sourceNames = new Set(columns.map((column) => column.name));
+  const usedNames = new Set<string>();
+  const duplicateColumns = new Set<string>();
 
-  const duplicateColumns = [...seen.entries()]
-    .filter(([, count]) => count > 1)
-    .map(([name]) => name);
+  const names = columns.map((column) => {
+    if (!usedNames.has(column.name)) {
+      usedNames.add(column.name);
+      return column.name;
+    }
+
+    duplicateColumns.add(column.name);
+
+    let suffix = 2;
+    let candidate = `${column.name}__${suffix}`;
+    while (sourceNames.has(candidate) || usedNames.has(candidate)) {
+      suffix += 1;
+      candidate = `${column.name}__${suffix}`;
+    }
+
+    usedNames.add(candidate);
+    return candidate;
+  });
 
   const rows = valueRows.map((values) => {
     const row: Record<string, unknown> = {};
@@ -82,8 +99,8 @@ function buildRows(
     return row;
   }) as QueryRows;
 
-  if (duplicateColumns.length > 0) {
-    rows.duplicateColumns = duplicateColumns;
+  if (duplicateColumns.size > 0) {
+    rows.duplicateColumns = [...duplicateColumns];
   }
 
   return rows;
@@ -147,15 +164,32 @@ export async function runReadOnly(
 }
 
 /**
- * Opens a real, pinned, forced-read-only connection to `connectionString` and returns a
- * `(statement, params?) => Promise<QueryRows>` executor over it — the shape `src/server.ts`'s
- * `QueryExecutor` contract expects. The thin counterpart to {@link runReadOnly}: this is the only
- * place in the module that calls `postgres()` for real.
+ * {@link createReadOnlyExecutor}'s return shape: the `(statement, params?) => Promise<QueryRows>`
+ * executor `src/server.ts`'s `QueryExecutor` contract expects, plus `close` to release the
+ * connection it opened. `close` exists because a `postgres()` pool defaults to
+ * `idle_timeout: null` and never `unref`s its socket (`node_modules/postgres/src/index.js`), so
+ * once a query has opened it, the pool keeps the Node event loop alive on its own — closing stdin
+ * alone does not end the process. `src/main.ts` calls `close` when the transport's stdin closes,
+ * so the server exits instead of leaking a Postgres backend — and the pnpm → dotenv-cli → tsx
+ * process chain `.mcp.json` launches — for the life of the host (AI-43 review round 4, SHOULD 1).
  */
-export function createReadOnlyExecutor(
-  connectionString: string,
-): (statement: string, params?: unknown[]) => Promise<QueryRows> {
+export interface ReadOnlyExecutor {
+  execute: (statement: string, params?: unknown[]) => Promise<QueryRows>;
+  close: () => Promise<void>;
+}
+
+/**
+ * Opens a real, pinned, forced-read-only connection to `connectionString` and returns a
+ * {@link ReadOnlyExecutor} over it — the thin counterpart to {@link runReadOnly}: this is the
+ * only place in the module that calls `postgres()` for real.
+ */
+export function createReadOnlyExecutor(connectionString: string): ReadOnlyExecutor {
   const sql = postgres(connectionString, READ_ONLY_CONNECTION_OPTIONS);
 
-  return (statement, params) => runReadOnly(sql, statement, params);
+  return {
+    execute: (statement, params) => runReadOnly(sql, statement, params),
+    // A 5s timeout, not the default (wait forever): a slow-to-drain in-flight query should still
+    // get a chance to finish, but shutdown must stay bounded even if one never does.
+    close: () => sql.end({ timeout: 5 }),
+  };
 }

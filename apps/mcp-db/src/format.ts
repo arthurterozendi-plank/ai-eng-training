@@ -21,6 +21,24 @@ export const SAMPLE_ROWS_DEFAULT = 5;
 export const SAMPLE_ROWS_MAX = 20;
 
 /**
+ * Renders the "truncated" half of {@link formatRowsNotice}'s header: how many rows are shown, the
+ * exact total, and the cap that produced the cut. `maxRows` can never be raised past
+ * {@link MAX_ROWS_CEILING} — `src/server.ts`'s `query` tool schema enforces that — so once a
+ * caller is already there, "pass a larger `maxRows`" is not advice, it is a contradiction (AI-43
+ * review round 4, NIT); this omits that clause exactly at the ceiling instead of stating it
+ * unconditionally.
+ */
+function truncatedRowsNotice(totalRows: number, maxRows: number): string {
+  const base = `Showing ${maxRows} of ${totalRows} rows — truncated at maxRows=${maxRows}.`;
+  const guidance =
+    maxRows >= MAX_ROWS_CEILING
+      ? "Narrow the query to see more."
+      : `Pass a larger \`maxRows\` (up to ${MAX_ROWS_CEILING}) or narrow the query to see more.`;
+
+  return `${base} ${guidance}`;
+}
+
+/**
  * Renders the header a `query` result opens with: the exact total, and — only when the result
  * was actually cut — how many rows are shown and the cap that produced the cut. The total is
  * never an estimate: postgres.js materialises the whole result set before this function ever
@@ -39,8 +57,7 @@ export function formatRowsNotice(
   const countNotice =
     totalRows <= maxRows
       ? `${totalRows} ${totalRows === 1 ? "row" : "rows"}.`
-      : `Showing ${maxRows} of ${totalRows} rows — truncated at maxRows=${maxRows}. ` +
-        `Pass a larger \`maxRows\` (up to ${MAX_ROWS_CEILING}) or narrow the query to see more.`;
+      : truncatedRowsNotice(totalRows, maxRows);
 
   if (duplicateColumns.length === 0) {
     return countNotice;

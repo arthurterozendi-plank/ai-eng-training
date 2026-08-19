@@ -26,11 +26,34 @@ function logReadyBanner(connectionString: string): void {
   console.error(`[talentscout-db] ready — DIRECT_DATABASE_URL ${hostname}:${port}${pathname}`);
 }
 
+/**
+ * Ends the database connection and exits. Bound to `process.stdin`'s `"end"` event in `main`:
+ * `StdioServerTransport` (`node_modules/@modelcontextprotocol/sdk`) never listens for stdin
+ * closing on its own — it only reacts to an explicit `close()` call nothing here makes — so
+ * without this, a `postgres()` pool that has opened a real backend keeps the event loop alive
+ * forever after the client disconnects (AI-43 review round 4, SHOULD 1). Every diagnostic here
+ * goes to `console.error`, and `close` itself never touches stdout, matching `logReadyBanner`'s
+ * invariant: stdout is JSON-RPC framing's exclusive channel, even on the way out.
+ */
+async function shutdown(close: () => Promise<void>): Promise<void> {
+  try {
+    await close();
+  } catch (error) {
+    console.error("[talentscout-db] error closing the database connection:", error);
+  } finally {
+    process.exit(0);
+  }
+}
+
 async function main(): Promise<void> {
-  const execute = createReadOnlyExecutor(env.DIRECT_DATABASE_URL);
+  const { execute, close } = createReadOnlyExecutor(env.DIRECT_DATABASE_URL);
   const server = createServer(execute);
   await server.connect(new StdioServerTransport());
   logReadyBanner(env.DIRECT_DATABASE_URL);
+
+  process.stdin.on("end", () => {
+    void shutdown(close);
+  });
 }
 
 main().catch((error: unknown) => {

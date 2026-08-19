@@ -4,9 +4,10 @@
  * This script connects through the real `runReadOnly` / `READ_ONLY_CONNECTION_OPTIONS` from
  * `src/read-only.ts` — the exact building blocks `src/main.ts` wires into the server — against
  * `DIRECT_DATABASE_URL`, runs the write matrix, the statement-splitting matrix, the GUC-poisoning
- * case, the timeout, the AC 1/AC 3/AC 5 witnesses and a real-stdio round trip — including a
- * notice-producing query, land-mine 4's regression test — prints one line per case, and exits
- * non-zero if any of them fails.
+ * case, the timeout, the AC 1/AC 3/AC 5 witnesses, a real-stdio round trip — including a
+ * notice-producing query, land-mine 4's regression test — and the process-exit / backend-leak
+ * checks (review AI-43 round 4, SHOULD 1) — prints one line per case, and exits non-zero if any
+ * of them fails.
  *
  * Lives under `scripts/`, not `src/`: it prints progress and opens a real connection and a real
  * subprocess, neither of which belongs in `pnpm check`. `vitest.config.mts`'s `include` is scoped
@@ -14,10 +15,12 @@
  * `mcp:verify` task is deliberately excluded from the task graph `pnpm check` walks (AI-43
  * YELLOW-10).
  */
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { env } from "@talentscout/db/env";
 import postgres from "postgres";
 
@@ -306,6 +309,26 @@ async function checkDuplicateColumnsSurvive(execute: QueryExecutor): Promise<Cas
     results.push(
       ok
         ? pass(name, `rendered ${keys.length} keys; applications.id survived as "id"`)
+        : fail(name, `rendered keys: ${keys.join(", ")}; row: ${JSON.stringify(row)}`),
+    );
+  }
+
+  {
+    // Review AI-43 round 4, SHOULD 2: a blind `id`, `id__2`, `id__3`, … counter renames the
+    // second "id" to "id__2", colliding with the real column already named that — the later
+    // assignment then overwrites it, discarding the value `2` with no error and a notice naming
+    // only "id", telling the caller nothing was lost when something was. Confirmed to fail
+    // before the fix (rendered `{ id: 1, id__2: 3 }`, two keys, value `2` gone) and to pass after
+    // it. `read-only.test.ts` covers the same shape against a hand-built fixture.
+    const name = 'SHOULD 2: "select 1 as id, 2 as id__2, 3 as id" does not lose the middle column';
+    const [row] = await execute("select 1 as id, 2 as id__2, 3 as id");
+    const keys = row ? Object.keys(row) : [];
+
+    const ok = keys.length === 3 && !!row && row.id === 1 && row.id__2 === 2 && row.id__3 === 3;
+
+    results.push(
+      ok
+        ? pass(name, `rendered keys: ${keys.join(", ")}; id=1, id__2=2, id__3=3`)
         : fail(name, `rendered keys: ${keys.join(", ")}; row: ${JSON.stringify(row)}`),
     );
   }
@@ -617,6 +640,307 @@ async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
   }
 }
 
+/**
+ * Force-kills `child`'s entire process group, not just `child` itself — necessary because
+ * `.mcp.json`'s command is itself a three-level chain (pnpm -> dotenv-cli -> tsx, per the review's
+ * own finding) that inherits stdio straight through by default. Killing only the top process
+ * leaves the lower two alive and orphaned (confirmed live: reparented to pid 1, `dotenv-cli`'s
+ * `tsx src/main.ts` still running, its Postgres backend still `ESTABLISHED`) — and because they
+ * still hold this *script's* own stdout/stdin pipes open on their end, this process's own event
+ * loop then never sees EOF and hangs too, past `main`'s own completion. `spawnDetached` pairs with
+ * this: `detached: true` makes `child.pid` a process-group id `kill(-pid, …)` can target.
+ */
+function killProcessTreeIfAlive(child: ChildProcessWithoutNullStreams): void {
+  if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    // Already gone between the check above and here, or never got a pid — nothing to signal.
+  }
+}
+
+/** `spawn`, but `detached: true` so the child leads its own process group — see {@link killProcessTreeIfAlive}. */
+function spawnDetached(
+  command: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): ChildProcessWithoutNullStreams {
+  return spawn(command, args, { stdio: ["pipe", "pipe", "pipe"], detached: true, env });
+}
+
+/** The outcome `closeStdinAndAwaitExit` races: either the child's real `exit` event, or the budget running out first. */
+interface ExitOutcome {
+  exited: boolean;
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
+
+/**
+ * Ends `child`'s stdin and races its `exit` event against `budgetMs`, timed from the moment stdin
+ * closes — never from spawn — so slow startup (three process layers: pnpm -> dotenv-cli -> tsx,
+ * per `.mcp.json`) never counts against the budget. 8s sits well above the ~1s a healthy exit
+ * measures and nowhere near "hangs forever", so a genuine leak still reads as a clear failure
+ * rather than flakiness (review AI-43 round 4, SHOULD 1).
+ */
+async function closeStdinAndAwaitExit(
+  child: ChildProcessWithoutNullStreams,
+  budgetMs = 8000,
+): Promise<{ elapsedMs: number; outcome: ExitOutcome }> {
+  const exitPromise = new Promise<ExitOutcome>((resolve) => {
+    child.once("exit", (code, signal) => resolve({ exited: true, code, signal }));
+  });
+  const timeoutPromise = new Promise<ExitOutcome>((resolve) => {
+    setTimeout(() => resolve({ exited: false, code: null, signal: null }), budgetMs);
+  });
+
+  const start = Date.now();
+  child.stdin.end();
+  const outcome = await Promise.race([exitPromise, timeoutPromise]);
+
+  return { elapsedMs: Date.now() - start, outcome };
+}
+
+function describeExitOutcome(outcome: ExitOutcome, elapsedMs: number): string {
+  return outcome.exited
+    ? `exited code=${String(outcome.code)} sig=${String(outcome.signal)} after ${elapsedMs}ms`
+    : `still running ${elapsedMs}ms after stdin close -> process leaked`;
+}
+
+/** Waits until `child`'s stderr has emitted `substring` (`src/main.ts`'s ready banner), or rejects after `timeoutMs`. */
+function waitForStderrIncludes(
+  child: ChildProcessWithoutNullStreams,
+  substring: string,
+  timeoutMs = 15_000,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`timed out waiting for stderr to include "${substring}"; got: ${buffer}`));
+    }, timeoutMs);
+
+    function onData(chunk: Buffer): void {
+      buffer += chunk.toString("utf8");
+      if (buffer.includes(substring)) {
+        cleanup();
+        resolve();
+      }
+    }
+    function cleanup(): void {
+      clearTimeout(timeout);
+      child.stderr.off("data", onData);
+    }
+
+    child.stderr.on("data", onData);
+  });
+}
+
+function sendJsonRpc(
+  child: ChildProcessWithoutNullStreams,
+  message: Record<string, unknown>,
+): void {
+  child.stdin.write(`${JSON.stringify(message)}\n`);
+}
+
+/**
+ * Reads one newline-delimited JSON-RPC message at a time off `stream` (the framing
+ * `shared/stdio.js` uses), buffering across `data` events in case a message arrives split across
+ * chunks. Returns a puller rather than an array so a caller can `await` exactly the next message
+ * after sending a request, the way a real client's request/response round trip works.
+ */
+function createJsonRpcReader(stream: NodeJS.ReadableStream): () => Promise<unknown> {
+  let buffer = "";
+  const queue: unknown[] = [];
+  const waiters: ((value: unknown) => void)[] = [];
+
+  stream.on("data", (chunk: Buffer) => {
+    buffer += chunk.toString("utf8");
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex);
+      buffer = buffer.slice(newlineIndex + 1);
+      const message: unknown = JSON.parse(line);
+      const waiter = waiters.shift();
+      if (waiter) {
+        waiter(message);
+      } else {
+        queue.push(message);
+      }
+      newlineIndex = buffer.indexOf("\n");
+    }
+  });
+
+  return () =>
+    new Promise((resolve) => {
+      const queued = queue.shift();
+      if (queued !== undefined) {
+        resolve(queued);
+        return;
+      }
+      waiters.push(resolve);
+    });
+}
+
+/**
+ * Speaks just enough raw JSON-RPC to run one `initialize` handshake and one `query` tool call
+ * against `child` — deliberately not the SDK's `Client` + `StdioClientTransport`: that transport's
+ * own `close()` (`client/stdio.js`) ends stdin, waits up to 2s, then escalates to `SIGTERM` and
+ * `SIGKILL`. That escalation exists precisely to paper over a server that never exits on its own —
+ * using it here would hide the exact hang {@link checkExitsAfterStdinCloseWithQuery} exists to
+ * catch behind its own cleanup, rather than measuring it.
+ */
+async function runProbeQueryOverRawStdio(
+  child: ChildProcessWithoutNullStreams,
+): Promise<{ ok: boolean; detail: string }> {
+  const readMessage = createJsonRpcReader(child.stdout);
+
+  sendJsonRpc(child, {
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: LATEST_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: "mcp-verify-exit-probe", version: "0.0.0" },
+    },
+  });
+  const initializeResponse = (await readMessage()) as { error?: { message: string } };
+  if (initializeResponse.error) {
+    return { ok: false, detail: `initialize failed: ${initializeResponse.error.message}` };
+  }
+
+  sendJsonRpc(child, { jsonrpc: "2.0", method: "notifications/initialized" });
+
+  sendJsonRpc(child, {
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: { name: "query", arguments: { sql: "select 1" } },
+  });
+  const queryResponse = (await readMessage()) as {
+    error?: { message: string };
+    result?: { isError?: boolean };
+  };
+  if (queryResponse.error) {
+    return { ok: false, detail: `query call failed: ${queryResponse.error.message}` };
+  }
+  if (queryResponse.result?.isError) {
+    return { ok: false, detail: `query call returned isError: ${JSON.stringify(queryResponse)}` };
+  }
+
+  return { ok: true, detail: "query succeeded" };
+}
+
+/** Opens a short-lived probe connection and counts backends carrying `applicationName`, then closes it. */
+async function countBackends(applicationName: string): Promise<number> {
+  const sql = postgres(env.DIRECT_DATABASE_URL, READ_ONLY_CONNECTION_OPTIONS);
+  try {
+    const rows =
+      await sql`select count(*)::int as n from pg_stat_activity where application_name = ${applicationName}`;
+    return Number(rows[0]?.n ?? 0);
+  } finally {
+    await sql.end();
+  }
+}
+
+/**
+ * Review AI-43 round 4, SHOULD 1's no-query witness: spawns the exact `talentscout-db` process
+ * `.mcp.json` registers, waits for its ready banner, closes stdin without ever sending a query,
+ * and asserts it exits — this is the shape the DoD's manual `… run mcp </dev/null | wc -c` check
+ * already covers structurally (stdin closes before any query can open a Postgres backend), kept
+ * here so both halves of the fix live in one place and one green run proves both.
+ */
+async function checkExitsAfterStdinCloseNoQuery(
+  launchSpec: McpJsonServerEntry,
+): Promise<CaseResult> {
+  const name = "process exit: no query, stdin closed -> exits (review AI-43 round 4, SHOULD 1)";
+  let child: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    child = spawnDetached(launchSpec.command, launchSpec.args ?? []);
+    await waitForStderrIncludes(child, "ready");
+
+    const { elapsedMs, outcome } = await closeStdinAndAwaitExit(child);
+    return outcome.exited && outcome.code === 0
+      ? pass(name, describeExitOutcome(outcome, elapsedMs))
+      : fail(name, describeExitOutcome(outcome, elapsedMs));
+  } catch (error) {
+    return fail(name, `threw: ${errorMessage(error)}`);
+  } finally {
+    if (child) {
+      killProcessTreeIfAlive(child);
+    }
+  }
+}
+
+/**
+ * Review AI-43 round 4, SHOULD 1's real witness: spawns the exact `talentscout-db` process
+ * `.mcp.json` registers with a unique `PGAPPNAME`, runs one `query` call over it, confirms that
+ * call actually opened a backend under that name (so "0 after" cannot pass vacuously because
+ * nothing ever connected), closes stdin, and asserts both that the process exits promptly and
+ * that the backend it opened is gone afterwards — the exact gap the manual DoD check
+ * (`… run mcp </dev/null | wc -c`, which closes stdin before any query runs) cannot see.
+ */
+async function checkExitsAfterStdinCloseWithQuery(
+  launchSpec: McpJsonServerEntry,
+): Promise<CaseResult[]> {
+  const exitName =
+    "process exit: after one query, stdin closed -> exits (review AI-43 round 4, SHOULD 1)";
+  const backendName =
+    "process exit: the query's Postgres backend is released, not leaked (review AI-43 round 4, SHOULD 1)";
+
+  const probeAppName = `mcp_verify_exit_probe_${process.pid}_${Date.now()}`;
+  let child: ChildProcessWithoutNullStreams | undefined;
+
+  try {
+    child = spawnDetached(launchSpec.command, launchSpec.args ?? [], {
+      ...process.env,
+      PGAPPNAME: probeAppName,
+    });
+    await waitForStderrIncludes(child, "ready");
+
+    const probe = await runProbeQueryOverRawStdio(child);
+    if (!probe.ok) {
+      return [
+        fail(exitName, `the probe query itself failed: ${probe.detail}`),
+        fail(backendName, "skipped: the probe query itself failed"),
+      ];
+    }
+
+    const backendCountBeforeClose = await countBackends(probeAppName);
+
+    const { elapsedMs, outcome } = await closeStdinAndAwaitExit(child);
+    const exitResult =
+      outcome.exited && outcome.code === 0
+        ? pass(exitName, describeExitOutcome(outcome, elapsedMs))
+        : fail(exitName, describeExitOutcome(outcome, elapsedMs));
+
+    // A short grace period for the backend's own socket teardown to land in pg_stat_activity, on
+    // top of the process itself having already exited above.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const backendCountAfterClose = await countBackends(probeAppName);
+
+    const backendResult =
+      backendCountBeforeClose > 0 && backendCountAfterClose === 0
+        ? pass(
+            backendName,
+            `present before close (n=${backendCountBeforeClose}), released after (n=${backendCountAfterClose})`,
+          )
+        : fail(backendName, `before=${backendCountBeforeClose}, after=${backendCountAfterClose}`);
+
+    return [exitResult, backendResult];
+  } catch (error) {
+    const detail = `threw: ${errorMessage(error)}`;
+    return [fail(exitName, detail), fail(backendName, detail)];
+  } finally {
+    if (child) {
+      killProcessTreeIfAlive(child);
+    }
+  }
+}
+
 function printResult(result: CaseResult): void {
   console.log(`[${result.pass ? " OK " : "FAIL"}] ${result.name} — ${result.detail}`);
 }
@@ -674,6 +998,13 @@ async function main(): Promise<void> {
   }
 
   results.push(...(await checkAc4OverRealStdio()));
+
+  // Review AI-43 round 4, SHOULD 1: separate spawns of the exact `.mcp.json` process, one per
+  // case, so the query case's `PGAPPNAME` probe and the backend-leak check it drives never
+  // interfere with the no-query case's timing.
+  const launchSpec = readTalentscoutDbLaunchSpec();
+  results.push(await checkExitsAfterStdinCloseNoQuery(launchSpec));
+  results.push(...(await checkExitsAfterStdinCloseWithQuery(launchSpec)));
 
   for (const result of results) {
     printResult(result);

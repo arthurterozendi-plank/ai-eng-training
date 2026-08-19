@@ -165,6 +165,53 @@ describe("runReadOnly", () => {
     ]);
     expect(result.duplicateColumns).toEqual(["id"]);
   });
+
+  /**
+   * AI-43 review round 4, SHOULD 2: a blind `id`, `id__2`, `id__3`, … counter renames the second
+   * `id` to `id__2` here, colliding with the real column already carrying that name — the later
+   * assignment then overwrites it, discarding the value `2` with no error and no notice naming
+   * the loss (the notice would still only say "id", telling the caller nothing was lost when
+   * something was). Reproduces `select 1 as id, 2 as id__2, 3 as id` by hand, the exact shape the
+   * review reported live; `scripts/verify-read-only.ts`'s `mcp:verify` run covers the same shape
+   * against a real Postgres connection.
+   */
+  it("does not let a generated suffix collide with a real column already carrying that name", async () => {
+    const calls: RecordedCall[] = [];
+
+    function makeUnsafe(scope: RecordedCall["scope"]) {
+      return (query: string, params?: unknown[], options?: { simple?: boolean }) => {
+        calls.push({ scope, query, params, options });
+        const pending = Promise.resolve([]) as unknown as Promise<Record<string, unknown>[]> & {
+          values: () => Promise<unknown>;
+        };
+        pending.values = () =>
+          Promise.resolve(
+            Object.assign([[1, 2, 3]], {
+              columns: [{ name: "id" }, { name: "id__2" }, { name: "id" }],
+            }),
+          );
+        return pending;
+      };
+    }
+
+    const tx = { unsafe: makeUnsafe("transaction") };
+    type Tx = typeof tx;
+    const fakeSql = {
+      unsafe: makeUnsafe("pool"),
+      begin: async (_mode: string, callback: (fakeTx: Tx) => Promise<unknown>) => callback(tx),
+    };
+
+    const result = await runReadOnly(
+      fakeSql as unknown as postgres.Sql,
+      "select 1 as id, 2 as id__2, 3 as id",
+    );
+
+    // Every value survives under a name distinct from every other emitted name and from every
+    // source column name — a naive counter would instead produce `{ id: 1, id__2: 3 }`, losing
+    // the value `2` and misattributing "id__2" to the third column.
+    expect([...result]).toEqual([{ id: 1, id__2: 2, id__3: 3 }]);
+    expect(result.duplicateColumns).toEqual(["id"]);
+  });
 });
 
 describe("READ_ONLY_CONNECTION_OPTIONS", () => {
@@ -191,7 +238,7 @@ describe("READ_ONLY_CONNECTION_OPTIONS", () => {
   });
 });
 
-const { postgresFactory, calls } = vi.hoisted(() => {
+const { postgresFactory, fakeSql, calls } = vi.hoisted(() => {
   const calls: RecordedCall[] = [];
 
   function makeUnsafe(scope: RecordedCall["scope"]) {
@@ -210,6 +257,7 @@ const { postgresFactory, calls } = vi.hoisted(() => {
   const fakeSql = {
     unsafe: makeUnsafe("pool"),
     begin: async (_mode: string, callback: (fakeTx: Tx) => Promise<unknown>) => callback(tx),
+    end: vi.fn(async () => undefined),
   };
 
   return { postgresFactory: vi.fn(() => fakeSql), fakeSql, calls };
@@ -219,7 +267,7 @@ vi.mock("postgres", () => ({ default: postgresFactory }));
 
 describe("createReadOnlyExecutor", () => {
   it("opens the connection with READ_ONLY_CONNECTION_OPTIONS and delegates to runReadOnly", async () => {
-    const execute = createReadOnlyExecutor("postgresql://user:pass@127.0.0.1:54322/postgres");
+    const { execute } = createReadOnlyExecutor("postgresql://user:pass@127.0.0.1:54322/postgres");
 
     expect(postgresFactory).toHaveBeenCalledWith(
       "postgresql://user:pass@127.0.0.1:54322/postgres",
@@ -229,5 +277,13 @@ describe("createReadOnlyExecutor", () => {
     await execute("select 1");
 
     expect(calls.map((call) => call.scope)).toEqual(["pool", "pool", "transaction", "transaction"]);
+  });
+
+  it("exposes a closer that ends the pool with a bounded timeout, not the default wait-forever", async () => {
+    const { close } = createReadOnlyExecutor("postgresql://user:pass@127.0.0.1:54322/postgres");
+
+    await close();
+
+    expect(fakeSql.end).toHaveBeenCalledWith({ timeout: 5 });
   });
 });

@@ -57,6 +57,19 @@ describe("formatRowsNotice", () => {
     expect(notice.toLowerCase()).toContain("truncat");
   });
 
+  it("suggests a larger maxRows below the ceiling", () => {
+    const notice = formatRowsNotice(299, 100);
+    expect(notice).toContain("larger");
+    expect(notice).toContain(`up to ${MAX_ROWS_CEILING}`);
+  });
+
+  it("drops the pass-a-larger-maxRows clause once maxRows is already at the ceiling (AI-43 review round 4, NIT)", () => {
+    const notice = formatRowsNotice(1500, MAX_ROWS_CEILING);
+    expect(notice).toContain(`truncated at maxRows=${MAX_ROWS_CEILING}`);
+    expect(notice).not.toContain("larger");
+    expect(notice).toContain("Narrow the query to see more.");
+  });
+
   it("says nothing about duplicates when none are given — the overwhelmingly common case", () => {
     const notice = formatRowsNotice(3, 100, []);
     expect(notice).toBe("3 rows.");
