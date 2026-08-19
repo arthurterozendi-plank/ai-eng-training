@@ -10,5 +10,5 @@ previously argued the other way.
 
 **How to use this folder:** open `walkthrough.html` in a browser (double-click — it is one file with
 no external assets, so it works offline and pastes into Slack or Notion). `plan.md` has the executed
-plan, the decisions log, and how the one escalation was resolved; the full hardened spec is at
+plan, the decisions log, and how the one escalation was resolved (the CLI repo is public); the full hardened spec is at
 [`docs/specs/ai-41-talentscout-cli-scaffold.md`](../../specs/ai-41-talentscout-cli-scaffold.md).

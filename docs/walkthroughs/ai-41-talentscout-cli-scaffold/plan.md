@@ -5,7 +5,8 @@ land-mine probes, the road not taken — is committed at
 [`docs/specs/ai-41-talentscout-cli-scaffold.md`](../../specs/ai-41-talentscout-cli-scaffold.md).
 
 **Ticket:** AI-41 · Chore · parent AI-9 · milestone "Week 1 — Use AI: Workflow" · blocks AI-39, AI-48
-**Outcome:** shipped; RED-1 resolved — no remote for now, by decision.
+**Outcome:** shipped; RED-1 resolved — the CLI repo is public at
+[`arthurterozendi-plank/talentscout-cli`](https://github.com/arthurterozendi-plank/talentscout-cli).
 
 ---
 
@@ -21,8 +22,8 @@ split exists, because the README previously argued the other way.
 
 ## Slices, as executed
 
-The plan was sliced into ten, hardened down to eight, and all eight ran except the one gated on a
-human decision.
+The plan was sliced into ten and hardened down to eight. Seven ran straight through; the eighth
+waited on a human decision and completed once that came back.
 
 | #   | Slice                                          | Outcome                                                                                       |
 | --- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -31,7 +32,7 @@ human decision.
 | 3   | `talentscout-cli/CLAUDE.md` and README         | ✅ AC 2 verified in both directions                                                           |
 | 4   | This repository's README records the decision  | ✅ commit `9f696d2`, an edit rather than an append                                            |
 | 5   | First commit in `talentscout-cli`              | ✅ commit `383e063`, 13 tracked files, lockfile included                                      |
-| 6   | GitHub remote                                  | ⛔ **blocked on RED-1** — not done, deliberately                                              |
+| 6   | GitHub remote                                  | ✅ resolved after the first PR: public repo created, `main` pushed                            |
 | 7   | Clean-clone verification (the real AC 1 proof) | ✅ clone → install → `--help` exit 0 → `--bogus` exit 1 → `pnpm check` exit 0                 |
 | 8   | cmux workspace                                 | ✅ `workspace:8 talentscout-cli`; `~/.config/cmux/cmux.json` SHA-256 unchanged                |
 
@@ -100,14 +101,19 @@ had to land together. A throwaway placeholder file was explicitly rejected as th
 
 **🔴 RED-1 — should `talentscout-cli` get a GitHub remote?**
 
-Recommended: private `arthurterozendi-plank/talentscout-cli`. Alternative: a `joinplank` org, if the
-coursework is meant to be company-visible. **Resolved 2026-08-19: neither — local only, no remote.** Deferred by decision rather than by
-silence; the remote was not rejected, only taken separately.
+**Resolved 2026-08-19: yes — public, at
+[`arthurterozendi-plank/talentscout-cli`](https://github.com/arthurterozendi-plank/talentscout-cli).**
 
-No acceptance criterion needs one; AC 1 says "given a clone of the new repo", and cloning from the
-local path is a real clone. Slice 6 is the only slice this gates, and adding the remote later costs
-nothing. It was escalated rather than defaulted silently because creating a repository picks an
-owner, a name and a visibility that are awkward to unwind once anything is pushed.
+The answer arrived in two steps, and the record keeps both because the second reverses the first.
+Local-only was taken initially: no acceptance criterion needs a remote — AC 1 says "given a clone of
+the new repo", and cloning from a local path is a real clone. The human then called for a public
+repository, which is what shipped: public rather than the recommended private, on the grounds that
+this is coursework.
+
+Escalating rather than defaulting is what made that reversal cheap. Creating a repository fixes an
+owner, a name and a visibility that are awkward to unwind once anything is pushed, so the choice was
+put to a human instead of guessed — and the tracked contents were scanned for credentials before the
+repo was made world-readable.
 
 ---
 

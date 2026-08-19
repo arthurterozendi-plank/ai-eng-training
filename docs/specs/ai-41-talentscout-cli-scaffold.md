@@ -31,8 +31,13 @@ project decision, and this document is committed to a public repository.)
 | B — create it under a `joinplank` org instead                                                              | Correct if this coursework is meant to be company-visible; I have no evidence either way          |
 | C — local only, no remote                                                                                  | Satisfies every AC (see §5); costs nothing to add the remote later                                |
 
-**RESOLVED — the human chose C** (2026-08-19). Slice 6 is deferred by decision, not by
-silence; the remote was not rejected, only taken separately. **Default had I heard nothing: C.** I will `git init` and commit locally and leave `git remote`
+**RESOLVED — option A, public** (2026-08-19). The repository was created at
+[`arthurterozendi-plank/talentscout-cli`](https://github.com/arthurterozendi-plank/talentscout-cli)
+and the first commit pushed. C was taken first and then reversed within the same change, which is
+why the table above still reads as a live choice — the escalation did its job: the owner, name and
+visibility were picked deliberately rather than defaulted into. Public rather than the recommended
+private, on the human's call: this is coursework, and the repo was scanned for credentials before
+creation. Slice 6 is complete. I will `git init` and commit locally and leave `git remote`
 unset. No AC requires a remote — AC 1 says "given a clone of the new repo", and cloning from the
 local path is a real clone. Slice 6 is the only slice gated on this;
 **slices 1–5 and 7–8 proceed now.**

@@ -642,7 +642,7 @@
             <span class="pill good">typecheck ✓</span>
             <span class="pill good">clean-clone AC ✓</span>
             <span class="pill good">2 reviews APPROVED</span>
-            <span class="pill warn">watch: no remote yet (RED-1 open)</span>
+            <span class="pill good">public repo pushed</span>
             <span class="pill warn">watch: main.ts untested</span>
             <p style="margin-top: 10px">
               Gates proven <em>live</em>, not assumed: a deliberate type error exits 2, an unused
@@ -1065,9 +1065,11 @@
             <h3>Why / what to check</h3>
             <p>
               CLAUDE.md requires a decision to land in the README in the same PR as the change,
-              recording the reason rather than the event. Reviewer check: this says why the CLI is
-              outside and what happens if it ever needs the schema — not merely that a second repo
-              now exists.
+              recording the reason rather than the event. This section was rewritten once
+              mid-flight: it first said the repo was hosted nowhere on purpose, then RED-1 came back
+              the other way and the entry was rewritten to describe the project as it is now rather
+              than appending a correction. Reviewer check: this says why the CLI is outside and
+              where it actually lives — not merely that a second repo exists.
             </p>
           </div>
           <div class="diff">
@@ -1082,62 +1084,60 @@
             <div class="diff-line add">
               <span class="ln">115</span><span class="gutter">+</span
               ><span class="code"
-                >| `talentscout-cli` | `../talentscout-cli` | The Week 2 CLI chatbot, and the Day 7
-                sandbox |</span
+                >| `talentscout-cli` | [arthurterozendi-plank/talentscout-cli][cli] | Week 2 CLI
+                |</span
               >
             </div>
             <div class="diff-line add">
               <span class="ln">117</span><span class="gutter">+</span
               ><span class="code"
-                >It is hosted nowhere on purpose for now: the scaffold had to prove itself from a
-                clean clone</span
-              >
-            </div>
-            <div class="diff-line add">
-              <span class="ln">118</span><span class="gutter">+</span
-              ><span class="code"
-                >before a remote fixed its owner, name and visibility, and that is a decision worth
-                taking</span
+                >[cli]: https://github.com/arthurterozendi-plank/talentscout-cli</span
               >
             </div>
             <div class="diff-line add">
               <span class="ln">119</span><span class="gutter">+</span
-              ><span class="code">separately rather than by default.</span>
-            </div>
-            <div class="diff-line add">
-              <span class="ln">127</span><span class="gutter">+</span
               ><span class="code"
-                >It shares no code with this repository, and the tooling could not be shared even if
-                it should be:</span
+                >Clone it beside this repository — the two are siblings, and nothing links them at
+                the</span
               >
             </div>
             <div class="diff-line add">
-              <span class="ln">128</span><span class="gutter">+</span
-              ><span class="code"
-                >`@talentscout/eslint-config` and `@talentscout/typescript-config` are private and
-                linked with</span
-              >
+              <span class="ln">120</span><span class="gutter">+</span
+              ><span class="code">filesystem level.</span>
             </div>
             <div class="diff-line add">
               <span class="ln">129</span><span class="gutter">+</span
               ><span class="code"
-                >`workspace:*`, so they are unreachable across a repository boundary.</span
+                >It shares no code with this repository, and the tooling could not be shared even if
+                it</span
               >
             </div>
             <div class="diff-line add">
-              <span class="ln">133</span><span class="gutter">+</span
+              <span class="ln">130</span><span class="gutter">+</span
+              ><span class="code"
+                >should be: `@talentscout/eslint-config` and `@talentscout/typescript-config` are
+                private</span
+              >
+            </div>
+            <div class="diff-line add">
+              <span class="ln">131</span><span class="gutter">+</span
+              ><span class="code"
+                >and linked with `workspace:*`, unreachable across a repository boundary.</span
+              >
+            </div>
+            <div class="diff-line add">
+              <span class="ln">135</span><span class="gutter">+</span
               ><span class="code"
                 >If the CLI later needs the hiring schema, `@talentscout/db` gets published rather
-                than reached</span
+                than</span
               >
             </div>
             <div class="diff-line add">
-              <span class="ln">134</span><span class="gutter">+</span
-              ><span class="code">into.</span>
+              <span class="ln">136</span><span class="gutter">+</span
+              ><span class="code">reached into.</span>
             </div>
           </div>
         </div>
-
         <!-- fragment 2 -->
         <div class="frag-detail" data-global="2">
           <div class="frag-why">

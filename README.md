@@ -110,14 +110,14 @@ single caller until a second one appears.
 
 ## Related repositories
 
-| Repository        | Where                | What it is                                                  |
-| ----------------- | -------------------- | ----------------------------------------------------------- |
-| `talentscout-cli` | `../talentscout-cli` | The Week 2 CLI chatbot, and the Day 7 tool sandbox after it |
+| Repository        | Where                                                 | What it is                                                  |
+| ----------------- | ----------------------------------------------------- | ----------------------------------------------------------- |
+| `talentscout-cli` | [arthurterozendi-plank/talentscout-cli][cli] (public) | The Week 2 CLI chatbot, and the Day 7 tool sandbox after it |
 
-It is hosted nowhere on purpose for now: the scaffold had to prove itself from a clean clone
-before a remote fixed its owner, name and visibility, and that is a decision worth taking
-separately rather than by default. If you do not have the directory, ask whoever set up your
-machine rather than hunting for a URL.
+[cli]: https://github.com/arthurterozendi-plank/talentscout-cli
+
+Clone it beside this repository — the two are siblings, and nothing links them at the filesystem
+level.
 
 The CLI is the deliberate exception to the layout above: it lives in its own repository rather
 than under `apps/`. Day 4 of the programme practises switching between workspaces, which is only
