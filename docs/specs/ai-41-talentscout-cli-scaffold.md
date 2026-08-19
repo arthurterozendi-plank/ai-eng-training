@@ -31,7 +31,8 @@ project decision, and this document is committed to a public repository.)
 | B — create it under a `joinplank` org instead                                                              | Correct if this coursework is meant to be company-visible; I have no evidence either way          |
 | C — local only, no remote                                                                                  | Satisfies every AC (see §5); costs nothing to add the remote later                                |
 
-**Default if I hear nothing: C.** I will `git init` and commit locally and leave `git remote`
+**RESOLVED — the human chose C** (2026-08-19). Slice 6 is deferred by decision, not by
+silence; the remote was not rejected, only taken separately. **Default had I heard nothing: C.** I will `git init` and commit locally and leave `git remote`
 unset. No AC requires a remote — AC 1 says "given a clone of the new repo", and cloning from the
 local path is a real clone. Slice 6 is the only slice gated on this;
 **slices 1–5 and 7–8 proceed now.**

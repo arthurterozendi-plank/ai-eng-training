@@ -5,7 +5,7 @@ land-mine probes, the road not taken — is committed at
 [`docs/specs/ai-41-talentscout-cli-scaffold.md`](../../specs/ai-41-talentscout-cli-scaffold.md).
 
 **Ticket:** AI-41 · Chore · parent AI-9 · milestone "Week 1 — Use AI: Workflow" · blocks AI-39, AI-48
-**Outcome:** shipped, one escalation still open (RED-1, the git remote).
+**Outcome:** shipped; RED-1 resolved — no remote for now, by decision.
 
 ---
 
@@ -96,12 +96,13 @@ had to land together. A throwaway placeholder file was explicitly rejected as th
 
 ---
 
-## Escalation still open
+## The escalation, and how it was resolved
 
 **🔴 RED-1 — should `talentscout-cli` get a GitHub remote?**
 
 Recommended: private `arthurterozendi-plank/talentscout-cli`. Alternative: a `joinplank` org, if the
-coursework is meant to be company-visible. **Taken by default: neither — local only, no remote.**
+coursework is meant to be company-visible. **Resolved 2026-08-19: neither — local only, no remote.** Deferred by decision rather than by
+silence; the remote was not rejected, only taken separately.
 
 No acceptance criterion needs one; AC 1 says "given a clone of the new repo", and cloning from the
 local path is a real clone. Slice 6 is the only slice this gates, and adding the remote later costs
