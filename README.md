@@ -69,11 +69,15 @@ over everything.
 
 ## Layout
 
-The repository is a Turborepo monorepo because the programme builds more than one deployable
-surface against one product: the later days add a scraper, a long-running extraction pipeline
-and a voice service, and each needs the same schema and the same lint and TypeScript rules as
-the web app. A single Next.js project would have forced either duplication or a deep-relative
-import mess between them.
+The repository is a Turborepo monorepo because several of the deployable surfaces the programme
+builds against one product share a contract: the later days add a scraper, a long-running
+extraction pipeline and a voice service, and each of those writes against the same schema under
+the same lint and TypeScript rules as the web app. A single Next.js project would have forced
+either duplication or a deep-relative import mess between them.
+
+Belonging to the same programme is not what earns a surface a place here; one deliberately does
+not share that contract and lives in its own repository, as [Related
+repositories](#related-repositories) explains.
 
 ```
 apps/
@@ -103,6 +107,32 @@ exist so a new workspace inherits the rules instead of re-deciding them. There i
 no shared Tailwind package: Tailwind v4 has no JS config, and the theme lives in a `globals.css`
 that `shadcn add` rewrites — a package would only fight that. Everything else stays inside its
 single caller until a second one appears.
+
+## Related repositories
+
+| Repository        | Where                | What it is                                                  |
+| ----------------- | -------------------- | ----------------------------------------------------------- |
+| `talentscout-cli` | `../talentscout-cli` | The Week 2 CLI chatbot, and the Day 7 tool sandbox after it |
+
+It is hosted nowhere on purpose for now: the scaffold had to prove itself from a clean clone
+before a remote fixed its owner, name and visibility, and that is a decision worth taking
+separately rather than by default. If you do not have the directory, ask whoever set up your
+machine rather than hunting for a URL.
+
+The CLI is the deliberate exception to the layout above: it lives in its own repository rather
+than under `apps/`. Day 4 of the programme practises switching between workspaces, which is only
+a real exercise when the two are genuinely separate — its own lockfile, its own lint and
+TypeScript rules, its own CLAUDE.md. An `apps/cli` directory would have inherited all three from
+this repository and taught nothing.
+
+It shares no code with this repository, and the tooling could not be shared even if it should be:
+`@talentscout/eslint-config` and `@talentscout/typescript-config` are private and linked with
+`workspace:*`, so they are unreachable across a repository boundary. The CLI also runs
+`moduleResolution: "nodenext"` where the web app runs `bundler`, which changes how its imports
+must be written — a rule that contradicts this repository's rather than extending it.
+
+If the CLI later needs the hiring schema, `@talentscout/db` gets published rather than reached
+into.
 
 ## Environment variables
 
