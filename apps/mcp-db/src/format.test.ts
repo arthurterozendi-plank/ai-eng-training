@@ -93,7 +93,7 @@ describe("formatQueryError", () => {
     expect(lines).toHaveLength(2);
     expect(text).toContain('syntax error at or near "slect"');
     expect(text).toContain("42601");
-    expect(text).toContain("1");
+    expect(text).toContain("position 1");
   });
 
   it("omits absent fields and leaves no stray separator", () => {

@@ -283,7 +283,9 @@ describes are visible too — and the `talentscout://tables` resource lists ever
 column and row counts. It is **read-only by construction, not by prompt instruction**: every
 statement runs inside `BEGIN READ ONLY` over the extended query protocol, which is what stops a
 payload like `commit; drop table jobs` from smuggling a second statement past the transaction — a
-bare `BEGIN READ ONLY` alone does not catch that. `query` results are capped at 100 rows by
-default, with the exact total always stated and a per-call `maxRows` override up to 1000.
+bare `BEGIN READ ONLY` alone does not catch that. Read-only means no writes, not no side effects —
+a statement can still take a lock or signal another backend, so every call resets session state and
+releases advisory locks before it runs. `query` results are capped at 100 rows by default, with the
+exact total always stated and a per-call `maxRows` override up to 1000.
 
 Approve each server when your MCP client prompts on first run.

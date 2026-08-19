@@ -55,12 +55,15 @@ describe("runReadOnly", () => {
     expect(result).toBe(rows);
     expect(getBeginMode()).toBe("read only");
 
-    // Order matters: RESET ALL runs on the pool connection before the transaction opens, then
-    // the statement_timeout preamble and the caller's statement run inside it.
-    expect(calls.map((call) => call.scope)).toEqual(["pool", "transaction", "transaction"]);
+    // Order matters: RESET ALL and the advisory-unlock both run on the pool connection before
+    // the transaction opens — RESET ALL restores GUCs only, it does not release a session-level
+    // advisory lock a prior call's function side effect could have taken — then the
+    // statement_timeout preamble and the caller's statement run inside it.
+    expect(calls.map((call) => call.scope)).toEqual(["pool", "pool", "transaction", "transaction"]);
     expect(calls[0]!.query.toLowerCase()).toBe("reset all");
-    expect(calls[1]!.query).toContain(`statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
-    expect(calls[2]!.query).toBe("select 1");
+    expect(calls[1]!.query.toLowerCase()).toBe("select pg_advisory_unlock_all()");
+    expect(calls[2]!.query).toContain(`statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+    expect(calls[3]!.query).toBe("select 1");
 
     // The property that matters: every call carries `{ simple: false }` explicitly, including
     // this zero-parameter case — postgres.js otherwise defaults to the simple protocol that lets
@@ -138,6 +141,6 @@ describe("createReadOnlyExecutor", () => {
 
     await execute("select 1");
 
-    expect(calls.map((call) => call.scope)).toEqual(["pool", "transaction", "transaction"]);
+    expect(calls.map((call) => call.scope)).toEqual(["pool", "pool", "transaction", "transaction"]);
   });
 });

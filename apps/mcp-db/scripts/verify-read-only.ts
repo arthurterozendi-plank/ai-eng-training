@@ -162,6 +162,30 @@ async function checkPoisoningDoesNotStick(execute: QueryExecutor): Promise<CaseR
   return [followingWrite, gucRestored];
 }
 
+/**
+ * Review AI-43 round 3, SHOULD 1: `RESET ALL` restores GUCs, not session-level advisory locks.
+ * One call takes `pg_advisory_lock` — a statement `BEGIN READ ONLY` never refuses, since it
+ * writes nothing — and a *later*, independent call must find it released by the preamble's
+ * `pg_advisory_unlock_all()`, or a leaked lock would pin `max: 1`'s single backend for the life
+ * of the server process and block anything else that needs one, including the migrator's own
+ * advisory locks (README's Database section).
+ */
+async function checkAdvisoryLockReleasedBetweenCalls(execute: QueryExecutor): Promise<CaseResult> {
+  const name = "advisory lock: a lock taken by one call is released before the next";
+  const lockId = 987654321;
+
+  await execute(`select pg_advisory_lock(${lockId})`);
+
+  const rows = await execute(
+    `select count(*)::int as n from pg_locks where locktype = 'advisory' and objid = ${lockId}`,
+  );
+  const heldOnNextCall = rows[0]?.n;
+
+  return heldOnNextCall === 0
+    ? pass(name, "0 advisory locks held by objid on the next call")
+    : fail(name, `expected 0, got ${String(heldOnNextCall)}`);
+}
+
 /** `select pg_sleep(12)` must be cancelled by `SET LOCAL statement_timeout`, well inside a 2s margin. */
 async function checkTimeout(execute: QueryExecutor): Promise<CaseResult> {
   const name = "timeout: pg_sleep(12) is cancelled by statement_timeout";
@@ -213,12 +237,23 @@ async function checkCatalogWitness(execute: QueryExecutor): Promise<CaseResult[]
   const enums = await execute(ENUMS_SQL);
   const enumTypeCount = new Set(enums.map((row) => row.enum_name)).size;
 
+  // Review AI-43 round 3, SHOULD 2: every unit test's fake `execute` only ever sees `[null]` — the
+  // array bind-parameter path (`describe-table` always sends `[[table]]`, `schema` sends
+  // `[["jobs"]]` when filtered) has no other live coverage. postgres.js serializing a JS array
+  // into `$1::text[]` under `unsafe(…, { simple: false })` is what this exercises.
+  const jobsColumns = await execute(COLUMNS_SQL, [["jobs"]]);
+
   const expectations: { name: string; actual: number; expected: number }[] = [
     { name: "AC3 witness: catalog tables", actual: tables.length, expected: 7 },
     { name: "AC3 witness: catalog columns", actual: columns.length, expected: 71 },
     { name: "AC3 witness: catalog foreign keys", actual: foreignKeys.length, expected: 10 },
     { name: "AC3 witness: catalog triggers", actual: triggers.length, expected: 6 },
     { name: "AC3 witness: catalog enum types", actual: enumTypeCount, expected: 6 },
+    {
+      name: 'AC3 witness: catalog columns filtered by ["jobs"] (array bind parameter)',
+      actual: jobsColumns.length,
+      expected: 12,
+    },
   ];
 
   return expectations.map(({ name, actual, expected }) =>
@@ -364,12 +399,20 @@ function readTalentscoutDbLaunchSpec(): McpJsonServerEntry {
  * SHOULD): the other stdout-purity discipline in this workspace is a manual DoD step
  * (`… run mcp </dev/null | wc -c`) that closes stdin before any query runs, so it is structurally
  * incapable of exercising a notice at all.
+ *
+ * Also the only case that exercises `describe-table` at all (review AI-43 round 3, SHOULD 2):
+ * every other check in this file drives `runReadOnly` directly, never a registered tool, so the
+ * array bind-parameter path `describe-table` always takes (`[[table]]`) was otherwise proven only
+ * over `checkCatalogWitness`'s direct `execute` call, never through the server's own tool handler
+ * and real stdio.
  */
 async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
   const resourceName = "AC4: talentscout://tables is listed and readable over real stdio";
   const bannerName = "AC4: the spawned server's banner names DIRECT_DATABASE_URL";
   const noticeName =
     "stdout purity: a notice-producing query leaves no unparseable frame on stdout";
+  const describeTableName =
+    "SHOULD 2: describe-table exercises the array bind-parameter path over real stdio";
 
   const launchSpec = readTalentscoutDbLaunchSpec();
   const transport = new StdioClientTransport({
@@ -400,6 +443,7 @@ async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
         fail(resourceName, "talentscout://tables was not in listResources()"),
         fail(bannerName, "skipped: the resource was never listed"),
         fail(noticeName, "skipped: the resource was never listed"),
+        fail(describeTableName, "skipped: the resource was never listed"),
       ];
     }
 
@@ -445,7 +489,25 @@ async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
                 : transportErrors.map((error) => error.message).join(" | ")),
           );
 
-    return [resourceResult, bannerResult, noticeResultCase];
+    const describeResult = (await client.callTool({
+      name: "describe-table",
+      arguments: { table: "jobs" },
+    })) as { isError?: boolean; content?: { type: string; text: string }[] };
+    const describeText = describeResult.content?.[0]?.text;
+    const describePayload = describeText
+      ? (JSON.parse(describeText) as { columns?: unknown[] })
+      : undefined;
+    const describeColumnCount = describePayload?.columns?.length;
+
+    const describeTableResult =
+      describeResult.isError !== true && describeColumnCount === 12
+        ? pass(describeTableName, `describe-table("jobs") returned ${describeColumnCount} columns`)
+        : fail(
+            describeTableName,
+            `isError=${String(describeResult.isError)}, columns=${String(describeColumnCount)}`,
+          );
+
+    return [resourceResult, bannerResult, noticeResultCase, describeTableResult];
   } finally {
     await client.close().catch(() => undefined);
   }
@@ -494,6 +556,7 @@ async function main(): Promise<void> {
 
     results.push(await checkGucOn(execute, "guc: default_transaction_read_only is on"));
     results.push(...(await checkPoisoningDoesNotStick(execute)));
+    results.push(await checkAdvisoryLockReleasedBetweenCalls(execute));
     results.push(await checkTimeout(execute));
     results.push(await checkCandidateCountWitness(execute));
     results.push(...(await checkCatalogWitness(execute)));

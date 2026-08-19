@@ -39,10 +39,17 @@ export const READ_ONLY_CONNECTION_OPTIONS = {
 /**
  * Runs exactly one statement against `sql` inside a read-only transaction, returning its rows.
  *
- * Three details each carry a measured security property and must not move:
+ * Four details each carry a measured security property and must not move:
  * - `RESET ALL` runs **before** opening the transaction, not after — a call that throws would
  *   skip an after-the-fact cleanup exactly when a poisoned session (a prior `SET SESSION
  *   default_transaction_read_only = off`) needs reversing.
+ * - `select pg_advisory_unlock_all()` runs in that same preamble, beside `RESET ALL`. `RESET
+ *   ALL` restores GUCs, not session-level advisory locks — a statement can still take one
+ *   (`pg_advisory_lock`) without writing anything, and `max: 1` pins that lock to the single
+ *   backend every call shares, so a lock one call takes would otherwise outlive it and block
+ *   anything else that needs it (the migrator's own advisory locks, per the README's Database
+ *   section) for the life of the server process. Read-only blocks writes; it does not block a
+ *   function's side effects.
  * - The transaction is opened with `sql.begin("read only", …)`.
  * - Every `sql.unsafe()` call — including the preamble and the reset — passes
  *   `{ simple: false }` explicitly, even when `params` is `undefined`. postgres.js otherwise
@@ -59,6 +66,7 @@ export async function runReadOnly(
   params?: unknown[],
 ): Promise<Record<string, unknown>[]> {
   await sql.unsafe("reset all", [], { simple: false });
+  await sql.unsafe("select pg_advisory_unlock_all()", [], { simple: false });
 
   const rows = await sql.begin("read only", async (tx) => {
     await tx.unsafe(`set local statement_timeout = ${STATEMENT_TIMEOUT_MS}`, [], {

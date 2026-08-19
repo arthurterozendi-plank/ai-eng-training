@@ -143,6 +143,12 @@ zod 4.4.3 satisfies it; `engines.node` is `>=18`.
 `interview_status`, `job_status`). The whole column catalog serialises to **10 412 bytes** — the
 `schema` tool never needs truncation.
 
+_Correction (review AI-43 round 3):_ 10 412 bytes measured the column catalog alone, before slice 4
+grew the `schema` tool to also carry foreign keys, indexes, triggers and enums. The shipped
+`schema` tool's full-database payload is roughly **19 KB**, not this figure — this number is kept
+as the slice-1-era measurement it was, not a live measurement of what ships, so it should not be
+read as one. The conclusion it supports is unaffected: 19 KB still needs no truncation.
+
 ### LAND-MINE 1 — `BEGIN READ ONLY` alone is **not** enough. A payload starting `commit;` escapes it.
 
 This is the single most important finding in this document, and it inverts the brief's conclusion.
