@@ -5,8 +5,8 @@ This file does not repeat them. It adds a worked skeleton, the export-style deci
 leaves open, and the failure modes agents actually hit here — read it after the root, not instead
 of it.
 
-Governs: `job-card/`, `candidate-profile/`, `settings-form/`, `theme-toggle/`, and the shadcn
-primitives in `ui/`.
+Governs every component directory here, plus the shadcn primitives in `ui/`. The citations below
+name the four that exist today.
 
 ## A. The skeleton
 
