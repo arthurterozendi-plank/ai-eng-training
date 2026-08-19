@@ -93,7 +93,8 @@ export function createServer(execute: QueryExecutor): McpServer {
       description:
         "Run a read-only SQL statement against the TalentScout database and return its rows " +
         `as JSON. Results are capped at ${MAX_ROWS_DEFAULT} rows by default; pass maxRows (up ` +
-        `to ${MAX_ROWS_CEILING}) to raise the cap for one call.`,
+        `to ${MAX_ROWS_CEILING}) to raise the cap for one call. The cap limits what is ` +
+        "returned, not what the statement scans — an unbounded query still runs in full.",
       inputSchema: {
         sql: z.string().min(1),
         maxRows: z.int().min(1).max(MAX_ROWS_CEILING).optional(),

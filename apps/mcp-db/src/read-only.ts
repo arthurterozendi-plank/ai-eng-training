@@ -16,12 +16,24 @@ export const STATEMENT_TIMEOUT_MS = 10_000;
  * `options` key is silently ignored by postgres.js, leaving the GUC off with no error. `max: 1`
  * pins the pool to one backend so the `RESET ALL` issued before every transaction always lands
  * on the connection the next `BEGIN READ ONLY` gets.
+ *
+ * `onnotice` is not optional here. postgres.js's own default, with no `onnotice` set, is
+ * `console.log(parseError(notice))` (`node_modules/postgres/src/connection.js`) — stdout, the
+ * channel `StdioServerTransport` owns exclusively for JSON-RPC framing (`src/main.ts`'s "every
+ * diagnostic goes to `console.error`" invariant). Any statement Postgres attaches a NOTICE or
+ * WARNING to — identifier truncation, a called function's `RAISE NOTICE`, a cast warning — would
+ * otherwise write an unframed line straight into the response stream with no query needed.
+ * Redirecting it to `console.error` keeps the notice text visible for debugging without
+ * corrupting stdout.
  */
 export const READ_ONLY_CONNECTION_OPTIONS = {
   connection: {
     options: "-c default_transaction_read_only=on",
   },
   max: 1,
+  onnotice: (notice: postgres.Notice) => {
+    console.error("[talentscout-db] notice:", notice);
+  },
 };
 
 /**

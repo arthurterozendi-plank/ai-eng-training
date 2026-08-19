@@ -89,6 +89,20 @@ describe("READ_ONLY_CONNECTION_OPTIONS", () => {
     expect(READ_ONLY_CONNECTION_OPTIONS.max).toBe(1);
     expect("options" in READ_ONLY_CONNECTION_OPTIONS).toBe(false);
   });
+
+  it("routes postgres.js NOTICEs to console.error, never postgres.js's console.log default", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    expect(typeof READ_ONLY_CONNECTION_OPTIONS.onnotice).toBe("function");
+    READ_ONLY_CONNECTION_OPTIONS.onnotice({ message: "identifier truncated" });
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(logSpy).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+    logSpy.mockRestore();
+  });
 });
 
 const { postgresFactory, calls } = vi.hoisted(() => {

@@ -35,5 +35,8 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   console.error("[talentscout-db] failed to start:", error);
-  process.exitCode = 1;
+  // `process.exitCode = 1` only takes effect once the event loop drains on its own. If
+  // `createReadOnlyExecutor` already opened the postgres pool before `server.connect` throws,
+  // that pool keeps the loop alive and the process hangs instead of exiting non-zero.
+  process.exit(1);
 });

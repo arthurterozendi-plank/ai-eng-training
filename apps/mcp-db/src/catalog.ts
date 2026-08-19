@@ -27,6 +27,10 @@ order by c.relname
  * one is passed. `format_type` is read off `pg_attribute` rather than
  * `information_schema.columns.data_type` because the latter collapses `numeric(10,2)` and
  * `varchar(255)` to bare type names, discarding the precision `format_type` keeps.
+ *
+ * `information_schema.columns` includes views, unlike {@link TABLE_NAMES_SQL}'s `relkind = 'r'`
+ * filter — a real asymmetry, accepted rather than fixed because `public` holds no view today
+ * (review AI-43 round 2, accept-without-change).
  */
 export const COLUMNS_SQL = `
 select

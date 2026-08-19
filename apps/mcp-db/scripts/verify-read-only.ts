@@ -4,8 +4,9 @@
  * This script connects through the real `runReadOnly` / `READ_ONLY_CONNECTION_OPTIONS` from
  * `src/read-only.ts` — the exact building blocks `src/main.ts` wires into the server — against
  * `DIRECT_DATABASE_URL`, runs the write matrix, the statement-splitting matrix, the GUC-poisoning
- * case, the timeout, the AC 1/AC 3/AC 5 witnesses and a real-stdio round trip, prints one line per
- * case, and exits non-zero if any of them fails.
+ * case, the timeout, the AC 1/AC 3/AC 5 witnesses and a real-stdio round trip — including a
+ * notice-producing query, land-mine 4's regression test — prints one line per case, and exits
+ * non-zero if any of them fails.
  *
  * Lives under `scripts/`, not `src/`: it prints progress and opens a real connection and a real
  * subprocess, neither of which belongs in `pnpm check`. `vitest.config.mts`'s `include` is scoped
@@ -273,33 +274,54 @@ async function checkNoResidue(execute: QueryExecutor): Promise<CaseResult> {
 }
 
 /**
- * The seven seeded tables' row counts, measured in AI-43 §2 and unchanged by any probe above —
- * fixed literals naming this script's own known tables, not caller input, so they are
- * interpolated directly rather than through `quoteValidatedTableName` (AI-43 §4), which exists to
- * validate a tool argument nobody controls here.
+ * The seven seeded tables this residue check watches — fixed literals naming this script's own
+ * known tables, not caller input, so they are interpolated directly rather than through
+ * `quoteValidatedTableName` (AI-43 §4), which exists to validate a tool argument nobody controls
+ * here. Names only, deliberately: their row counts are snapshotted fresh at the start of every run
+ * (see {@link snapshotTableCounts}) rather than pinned to a literal measured once, so "unchanged"
+ * is judged against this run's own seed instead of a volume a reseed would silently invalidate
+ * (review AI-43 round 2, NIT).
  */
-const EXPECTED_TABLE_COUNTS: Record<string, number> = {
-  jobs: 8,
-  candidates: 60,
-  applications: 90,
-  application_stage_transitions: 299,
-  interviews: 43,
-  notes: 120,
-  pipeline_stages: 7,
-};
+const RESIDUE_WATCHED_TABLES = [
+  "jobs",
+  "candidates",
+  "applications",
+  "application_stage_transitions",
+  "interviews",
+  "notes",
+  "pipeline_stages",
+];
 
-/** Confirms none of the probe statements' near-misses mutated a real table's row count either. */
-async function checkTableCountsUnchanged(execute: QueryExecutor): Promise<CaseResult[]> {
+/** Reads an exact row count for each of {@link RESIDUE_WATCHED_TABLES}, keyed by table name. */
+async function snapshotTableCounts(execute: QueryExecutor): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const table of RESIDUE_WATCHED_TABLES) {
+    const rows = await execute(`select count(*)::int as n from "${table}"`);
+    counts[table] = Number(rows[0]?.n ?? Number.NaN);
+  }
+  return counts;
+}
+
+/**
+ * Confirms none of the probe statements' near-misses mutated a real table's row count either, by
+ * comparing a fresh read against `before` — the snapshot {@link snapshotTableCounts} took at the
+ * start of this run, before any probe statement ran.
+ */
+async function checkTableCountsUnchanged(
+  execute: QueryExecutor,
+  before: Record<string, number>,
+): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
 
-  for (const [table, expected] of Object.entries(EXPECTED_TABLE_COUNTS)) {
+  for (const table of RESIDUE_WATCHED_TABLES) {
     const name = `residue: ${table} row count is unchanged`;
     const rows = await execute(`select count(*)::int as n from "${table}"`);
     const actual = rows[0]?.n;
+    const expected = before[table];
     results.push(
       actual === expected
         ? pass(name, `${actual}`)
-        : fail(name, `expected ${expected}, got ${String(actual)}`),
+        : fail(name, `expected ${expected} (measured at run start), got ${String(actual)}`),
     );
   }
 
@@ -333,15 +355,21 @@ function readTalentscoutDbLaunchSpec(): McpJsonServerEntry {
 
 /**
  * AC 4, over a real subprocess and real stdio — not `InMemoryTransport` — spawned with the exact
- * `command`/`args` `.mcp.json` registers. Two properties, from one connection: the `tables`
+ * `command`/`args` `.mcp.json` registers. Three properties, from one connection: the `tables`
  * resource is listed and reads back every table (proving AC 4 end to end, the way an agent would
- * see it), and the server's own startup banner (`src/main.ts`) names `DIRECT_DATABASE_URL` on
+ * see it); the server's own startup banner (`src/main.ts`) names `DIRECT_DATABASE_URL` on
  * stderr — the mechanical evidence that this is the key actually in use, not merely the key this
- * script itself was told to use.
+ * script itself was told to use; and a notice-producing `query` call leaves stdout parseable —
+ * the only check in this file that can actually observe land-mine 4 (review AI-43 round 2,
+ * SHOULD): the other stdout-purity discipline in this workspace is a manual DoD step
+ * (`… run mcp </dev/null | wc -c`) that closes stdin before any query runs, so it is structurally
+ * incapable of exercising a notice at all.
  */
 async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
   const resourceName = "AC4: talentscout://tables is listed and readable over real stdio";
   const bannerName = "AC4: the spawned server's banner names DIRECT_DATABASE_URL";
+  const noticeName =
+    "stdout purity: a notice-producing query leaves no unparseable frame on stdout";
 
   const launchSpec = readTalentscoutDbLaunchSpec();
   const transport = new StdioClientTransport({
@@ -354,6 +382,15 @@ async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
   const stderrChunks: Buffer[] = [];
   transport.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
+  // Land-mine 4's regression test (review AI-43 round 2, BLOCKER): postgres.js's own default,
+  // with no `onnotice` set, writes a Postgres NOTICE straight to stdout via `console.log` —
+  // JSON-RPC framing's one exclusive channel. `StdioClientTransport`'s `ReadBuffer` calls
+  // `onerror` for every line it cannot parse as JSON-RPC, so zero calls here is the only honest
+  // proof that nothing landed on stdout unframed. Attached before `connect()`, matching the
+  // stderr listener above, so no early frame is missed.
+  const transportErrors: Error[] = [];
+  transport.onerror = (error: Error) => transportErrors.push(error);
+
   try {
     await client.connect(transport);
 
@@ -362,6 +399,7 @@ async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
       return [
         fail(resourceName, "talentscout://tables was not in listResources()"),
         fail(bannerName, "skipped: the resource was never listed"),
+        fail(noticeName, "skipped: the resource was never listed"),
       ];
     }
 
@@ -387,7 +425,27 @@ async function checkAc4OverRealStdio(): Promise<CaseResult[]> {
       ? pass(bannerName, "stderr banner names DIRECT_DATABASE_URL")
       : fail(bannerName, `stderr did not mention DIRECT_DATABASE_URL: ${stderrText.trim()}`);
 
-    return [resourceResult, bannerResult];
+    // A 70-character alias exceeds Postgres's 63-byte identifier limit, so the backend attaches
+    // a NOTICE ("identifier … will be truncated to …") to an otherwise ordinary, successful
+    // `query` call — no write needed, and no statement this server would ever refuse.
+    const noticeSql = `select 1 as ${"a".repeat(70)}`;
+    const noticeResult = (await client.callTool({
+      name: "query",
+      arguments: { sql: noticeSql },
+    })) as { isError?: boolean };
+
+    const noticeResultCase =
+      noticeResult.isError !== true && transportErrors.length === 0
+        ? pass(noticeName, "the notice-producing query succeeded with zero transport parse errors")
+        : fail(
+            noticeName,
+            `isError=${String(noticeResult.isError)}, transport parse errors: ` +
+              (transportErrors.length === 0
+                ? "none"
+                : transportErrors.map((error) => error.message).join(" | ")),
+          );
+
+    return [resourceResult, bannerResult, noticeResultCase];
   } finally {
     await client.close().catch(() => undefined);
   }
@@ -413,6 +471,10 @@ async function main(): Promise<void> {
   const results: CaseResult[] = [];
 
   try {
+    // Snapshotted before any probe statement runs, so `checkTableCountsUnchanged` judges
+    // "unchanged" against this run's own seed rather than a literal a reseed would invalidate.
+    const tableCountsBefore = await snapshotTableCounts(execute);
+
     for (const testCase of WRITE_MATRIX) {
       results.push(
         await expectRejected(execute, `write: ${testCase.name}`, testCase.statement, "25006"),
@@ -438,7 +500,7 @@ async function main(): Promise<void> {
     results.push(await checkMalformedQueryWitness(execute));
     results.push(await checkTruncationWitness(execute));
     results.push(await checkNoResidue(execute));
-    results.push(...(await checkTableCountsUnchanged(execute)));
+    results.push(...(await checkTableCountsUnchanged(execute, tableCountsBefore)));
   } finally {
     await sql.end();
   }
