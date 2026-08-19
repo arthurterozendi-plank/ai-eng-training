@@ -1,0 +1,31 @@
+{
+  "name": "@talentscout/mcp-db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@talentscout/db": "workspace:*",
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@talentscout/eslint-config": "workspace:*",
+    "@talentscout/typescript-config": "workspace:*",
+    "@types/node": "^20",
+    "@vitest/coverage-v8": "^4.1.10",
+    "dotenv-cli": "^10.0.0",
+    "eslint": "^9",
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
