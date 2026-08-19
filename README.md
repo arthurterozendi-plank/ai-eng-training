@@ -84,7 +84,10 @@ apps/
   web/                    @talentscout/web — the Next.js application
     src/
       app/                App Router routes, layouts, route handlers
+        api/
+          CLAUDE.md       Route handler conventions
       components/         Shared React components
+        CLAUDE.md         Component conventions
         ui/               shadcn/ui primitives (generated — edit freely, they are yours)
       hooks/              Client-side React hooks
       lib/                Framework-agnostic helpers (cn, formatters)
@@ -95,6 +98,10 @@ packages/
   eslint-config/          @talentscout/eslint-config — `base` and `next`
   typescript-config/      @talentscout/typescript-config — the tsconfig bases
 ```
+
+**Two convention tiers.** The root `CLAUDE.md` holds rules that apply everywhere; the two folder
+`CLAUDE.md` files above hold the module-local detail it leaves out, and load when Claude reads any
+file in that folder's **subtree** — no _source_ file sits directly inside either.
 
 Import alias: `@/*` maps to the **current workspace's** `src/*`. Across workspaces, import by
 package name — `@talentscout/db/schema/jobs` — never by a relative path that climbs out of one
