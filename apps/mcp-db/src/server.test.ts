@@ -425,3 +425,144 @@ describe("describe-table tool", () => {
     });
   });
 });
+
+describe("tables resource", () => {
+  const validTables = ["jobs", "candidates", "applications"];
+  const fixtureColumns = [
+    {
+      table_name: "jobs",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "jobs",
+      column_name: "title",
+      ordinal_position: 2,
+      data_type: "text",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "candidates",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "applications",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "applications",
+      column_name: "job_id",
+      ordinal_position: 2,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "applications",
+      column_name: "candidate_id",
+      ordinal_position: 3,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+  ];
+  const fixtureRowCounts: Record<string, number> = { jobs: 8, candidates: 60, applications: 90 };
+
+  /**
+   * A fake `execute` distinguishing each table's exact `count(*)` by the quoted identifier
+   * `countRowsSql` built it from, so the test can tell the resource wired each table to its own
+   * count rather than reusing one value across all of them.
+   */
+  function buildExecutor(): { execute: QueryExecutor; calls: RecordedCall[] } {
+    const calls: RecordedCall[] = [];
+
+    const execute: QueryExecutor = async (statement, params) => {
+      calls.push({ statement, params });
+
+      if (statement === TABLE_NAMES_SQL) {
+        return validTables.map((table_name) => ({ table_name }));
+      }
+      if (statement === COLUMNS_SQL) {
+        return fixtureColumns;
+      }
+      if (statement.startsWith("select count(*)")) {
+        const table = validTables.find(
+          (name) => statement === `select count(*) as n from "${name}"`,
+        );
+        return [{ n: table ? fixtureRowCounts[table] : 0 }];
+      }
+
+      throw new Error(`tables resource executor: unexpected statement: ${statement}`);
+    };
+
+    return { execute, calls };
+  }
+
+  it("lists talentscout://tables with a name and a description", async () => {
+    const { execute } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const { resources } = await client.listResources();
+    const tables = resources.find((resource) => resource.uri === "talentscout://tables");
+
+    expect(tables).toBeDefined();
+    expect(tables?.name).toBeTruthy();
+    expect(tables?.description).toBeTruthy();
+  });
+
+  it("reads talentscout://tables as application/json with one entry per table, carrying its column count and exact row count", async () => {
+    const { execute } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await client.readResource({ uri: "talentscout://tables" });
+
+    expect(result.contents).toHaveLength(1);
+    const [content] = result.contents;
+    if (!content || !("text" in content)) {
+      throw new Error("expected a text resource content");
+    }
+    expect(content.mimeType).toBe("application/json");
+
+    const payload = JSON.parse(content.text) as {
+      table: string;
+      columnCount: number;
+      rowCount: number;
+    }[];
+
+    expect(payload).toHaveLength(validTables.length);
+    expect(payload).toEqual(
+      expect.arrayContaining([
+        { table: "jobs", columnCount: 2, rowCount: 8 },
+        { table: "candidates", columnCount: 1, rowCount: 60 },
+        { table: "applications", columnCount: 3, rowCount: 90 },
+      ]),
+    );
+  });
+
+  it("counts each table's rows through the validated, quoted identifier from the live catalog listing", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    await client.readResource({ uri: "talentscout://tables" });
+
+    const countCalls = calls.filter((call) => call.statement.startsWith("select count(*)"));
+    expect(countCalls).toHaveLength(validTables.length);
+    for (const table of validTables) {
+      expect(
+        countCalls.some((call) => call.statement === `select count(*) as n from "${table}"`),
+      ).toBe(true);
+    }
+  });
+});

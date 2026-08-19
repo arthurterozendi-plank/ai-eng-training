@@ -76,9 +76,9 @@ function toErrorResult(error: unknown): {
 }
 
 /**
- * Builds the `talentscout-db` MCP server and registers `query`, `schema` and `describe-table`
- * against `execute`. `src/main.ts` is the sole caller that supplies a real `execute` and connects
- * a transport.
+ * Builds the `talentscout-db` MCP server and registers `query`, `schema`, `describe-table` and
+ * the `tables` resource against `execute`. `src/main.ts` is the sole caller that supplies a real
+ * `execute` and connects a transport.
  */
 export function createServer(execute: QueryExecutor): McpServer {
   const server = new McpServer({ name: "talentscout-db", version: "0.1.0" });
@@ -190,6 +190,43 @@ export function createServer(execute: QueryExecutor): McpServer {
       } catch (error) {
         return toErrorResult(error);
       }
+    },
+  );
+
+  server.registerResource(
+    "tables",
+    "talentscout://tables",
+    {
+      title: "Tables",
+      description:
+        "Every table in the TalentScout database's public schema, with its column count and " +
+        "exact row count — browsable in one read (AI-43 AC 4).",
+      mimeType: "application/json",
+    },
+    async (uri) => {
+      const validTables = await fetchValidTableNames(execute);
+      const columnRows = (await execute(COLUMNS_SQL, [null])) as unknown as ColumnRow[];
+      const columnCounts = new Map(
+        shapeColumns(columnRows).map((table) => [table.table, table.columns.length]),
+      );
+
+      const tables = await Promise.all(
+        validTables.map(async (table) => {
+          const quotedTable = quoteValidatedTableName(table, validTables);
+          const countRows = await execute(countRowsSql(quotedTable));
+          return {
+            table,
+            columnCount: columnCounts.get(table) ?? 0,
+            rowCount: Number(countRows[0]?.n ?? 0),
+          };
+        }),
+      );
+
+      return {
+        contents: [
+          { uri: uri.href, mimeType: "application/json", text: JSON.stringify(tables, null, 2) },
+        ],
+      };
     },
   );
 
