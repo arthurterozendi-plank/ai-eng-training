@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "mcp": "dotenv -e ../../.env.local -- tsx src/main.ts",
+    "mcp:verify": "dotenv -e ../../.env.local -- tsx scripts/verify-read-only.ts",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "typecheck": "tsc --noEmit",

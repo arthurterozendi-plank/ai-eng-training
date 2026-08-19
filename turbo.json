@@ -37,6 +37,7 @@
     "db:check": { "cache": false },
     "db:export": { "cache": false },
     "db:migrate": { "cache": false },
-    "db:seed": { "cache": false }
+    "db:seed": { "cache": false },
+    "mcp:verify": { "cache": false }
   }
 }

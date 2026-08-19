@@ -19,7 +19,8 @@
     "db:check": "turbo run db:check",
     "db:export": "turbo run db:export",
     "db:migrate": "turbo run db:migrate",
-    "db:seed": "turbo run db:seed"
+    "db:seed": "turbo run db:seed",
+    "mcp:verify": "turbo run mcp:verify"
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
