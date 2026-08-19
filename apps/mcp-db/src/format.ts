@@ -65,8 +65,8 @@ export function formatRowsNotice(
 
   const plural = duplicateColumns.length === 1 ? "column" : "columns";
   return (
-    `${countNotice} Repeated ${plural} renamed to avoid overwriting an earlier value — see the ` +
-    `"__2" suffix below: ${duplicateColumns.join(", ")}.`
+    `${countNotice} Repeated ${plural} renamed to avoid overwriting an earlier value, ` +
+    `with a numeric suffix: ${duplicateColumns.join(", ")}.`
   );
 }
 

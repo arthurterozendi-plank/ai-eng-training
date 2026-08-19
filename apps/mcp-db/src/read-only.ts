@@ -65,9 +65,22 @@ export const READ_ONLY_CONNECTION_OPTIONS: postgres.Options<Record<string, never
  * unchanged transcription for every catalog caller.
  */
 function buildRows(
-  columns: readonly { name: string }[],
-  valueRows: readonly unknown[][],
+  columns: readonly { name: string }[] | undefined,
+  valueRows: readonly unknown[][] | unknown,
 ): QueryRows {
+  // `COPY … TO STDOUT` is a read, is permitted inside `BEGIN READ ONLY`, and returns no row
+  // description: postgres.js hands back a Readable rather than rows, and leaves `columns` unset.
+  // Both guards are load-bearing. Without the second, the stream survives `.map()` — Node's
+  // streams have their own — and `JSON.stringify` renders its internals as the result, which is
+  // the symptom the spec's RISK-8 predicted. Refuse it in words the caller can act on instead
+  // (AI-43 review round 6).
+  if (!columns || !Array.isArray(valueRows)) {
+    throw new Error(
+      "this statement returns a stream rather than rows, which this tool cannot render — " +
+        "COPY … TO STDOUT is the usual cause. Wrap the data in a SELECT instead.",
+    );
+  }
+
   const sourceNames = new Set(columns.map((column) => column.name));
   const usedNames = new Set<string>();
   const duplicateColumns = new Set<string>();

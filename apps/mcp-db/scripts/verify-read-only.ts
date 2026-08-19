@@ -241,6 +241,27 @@ function sameValue(a: unknown, b: unknown): boolean {
  * equal to `jobs.id`, with `applications.id`, `applications.created_at` and
  * `applications.updated_at` gone — and to pass after it.
  */
+async function checkStreamingStatementIsRefusedInWords(
+  execute: QueryExecutor,
+): Promise<CaseResult> {
+  // `COPY … TO STDOUT` is a read and `BEGIN READ ONLY` permits it, but postgres.js returns a
+  // Readable instead of rows. Two earlier shapes both failed the caller: a raw TypeError
+  // ("Cannot read properties of undefined"), and — once that was defaulted away — the stream's
+  // own internals rendered as the result, because Node streams carry their own `.map()`.
+  const name = 'SHOULD: "copy … to stdout" is refused in words, not as a TypeError or a stream';
+  try {
+    const rows = await execute("copy (select 1) to stdout");
+    return fail(name, `expected a refusal, got ${JSON.stringify(rows).slice(0, 80)}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const refusedInWords =
+      message.includes("stream rather than rows") &&
+      !message.includes("Cannot read properties") &&
+      !message.includes("_readableState");
+    return refusedInWords ? pass(name, message.slice(0, 90)) : fail(name, message.slice(0, 90));
+  }
+}
+
 async function checkDuplicateColumnsSurvive(execute: QueryExecutor): Promise<CaseResult[]> {
   const results: CaseResult[] = [];
 
@@ -987,6 +1008,7 @@ async function main(): Promise<void> {
     results.push(await checkAdvisoryLockReleasedBetweenCalls(execute));
     results.push(await checkTimeout(execute));
     results.push(...(await checkDuplicateColumnsSurvive(execute)));
+    results.push(await checkStreamingStatementIsRefusedInWords(execute));
     results.push(await checkCandidateCountWitness(execute));
     results.push(...(await checkCatalogWitness(execute)));
     results.push(await checkMalformedQueryWitness(execute));
