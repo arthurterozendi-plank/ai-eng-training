@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import {
@@ -14,13 +15,16 @@ import {
   shapeEnums,
   shapeForeignKeys,
   shapeIndexes,
+  shapeTriggers,
   TABLE_NAMES_SQL,
+  TRIGGERS_SQL,
   UnknownTableError,
   type ColumnRow,
   type EnumRow,
   type ForeignKeyRow,
   type IndexRow,
   type TableNameRow,
+  type TriggerRow,
 } from "./catalog";
 import {
   formatQueryError,
@@ -116,11 +120,14 @@ export function createServer(execute: QueryExecutor): McpServer {
     {
       description:
         "Return the TalentScout database's schema: every table's columns (with their real " +
-        "Postgres types, nullability and defaults), foreign keys, indexes and enum types, read " +
-        "live from the catalog rather than from the Drizzle schema files. Pass `tables` to " +
-        "narrow to a subset; omit it for the whole database.",
+        "Postgres types, nullability and defaults), foreign keys, indexes, triggers and enum " +
+        "types, read live from the catalog rather than from the Drizzle schema files. Pass " +
+        "`tables` to narrow to a subset; omit it for the whole database.",
       inputSchema: {
-        tables: z.array(z.string().min(1)).optional(),
+        // `.min(1)`, not a bare optional array: an empty `tables` filter binds `$1::text[]` to
+        // `'{}'`, matching no row — a silent empty result the ticket's "error on an unrecognised
+        // name" choice exists precisely to avoid (AI-43 §4, review AI-43 NIT 3).
+        tables: z.array(z.string().min(1)).min(1).optional(),
       },
       annotations: READ_ONLY_ANNOTATIONS,
     },
@@ -132,10 +139,11 @@ export function createServer(execute: QueryExecutor): McpServer {
         }
 
         const filter = tables ?? null;
-        const [columnRows, foreignKeyRows, indexRows, enumRows] = await Promise.all([
+        const [columnRows, foreignKeyRows, indexRows, triggerRows, enumRows] = await Promise.all([
           execute(COLUMNS_SQL, [filter]) as unknown as Promise<ColumnRow[]>,
           execute(FOREIGN_KEYS_SQL, [filter]) as unknown as Promise<ForeignKeyRow[]>,
           execute(INDEXES_SQL, [filter]) as unknown as Promise<IndexRow[]>,
+          execute(TRIGGERS_SQL, [filter]) as unknown as Promise<TriggerRow[]>,
           execute(ENUMS_SQL) as unknown as Promise<EnumRow[]>,
         ]);
 
@@ -143,6 +151,7 @@ export function createServer(execute: QueryExecutor): McpServer {
           tables: shapeColumns(columnRows),
           foreignKeys: shapeForeignKeys(foreignKeyRows),
           indexes: shapeIndexes(indexRows),
+          triggers: shapeTriggers(triggerRows),
           enums: shapeEnums(enumRows),
         };
 
@@ -204,29 +213,41 @@ export function createServer(execute: QueryExecutor): McpServer {
       mimeType: "application/json",
     },
     async (uri) => {
-      const validTables = await fetchValidTableNames(execute);
-      const columnRows = (await execute(COLUMNS_SQL, [null])) as unknown as ColumnRow[];
-      const columnCounts = new Map(
-        shapeColumns(columnRows).map((table) => [table.table, table.columns.length]),
-      );
+      try {
+        const validTables = await fetchValidTableNames(execute);
+        const columnRows = (await execute(COLUMNS_SQL, [null])) as unknown as ColumnRow[];
+        const columnCounts = new Map(
+          shapeColumns(columnRows).map((table) => [table.table, table.columns.length]),
+        );
 
-      const tables = await Promise.all(
-        validTables.map(async (table) => {
-          const quotedTable = quoteValidatedTableName(table, validTables);
-          const countRows = await execute(countRowsSql(quotedTable));
-          return {
-            table,
-            columnCount: columnCounts.get(table) ?? 0,
-            rowCount: Number(countRows[0]?.n ?? 0),
-          };
-        }),
-      );
+        const tables = await Promise.all(
+          validTables.map(async (table) => {
+            const quotedTable = quoteValidatedTableName(table, validTables);
+            const countRows = await execute(countRowsSql(quotedTable));
+            return {
+              table,
+              columnCount: columnCounts.get(table) ?? 0,
+              rowCount: Number(countRows[0]?.n ?? 0),
+            };
+          }),
+        );
 
-      return {
-        contents: [
-          { uri: uri.href, mimeType: "application/json", text: JSON.stringify(tables, null, 2) },
-        ],
-      };
+        return {
+          contents: [
+            { uri: uri.href, mimeType: "application/json", text: JSON.stringify(tables, null, 2) },
+          ],
+        };
+      } catch (error) {
+        // A `ReadResourceResult` carries no `isError` field the way a tool's `CallToolResult`
+        // does — the MCP resource protocol has no structured error shape — so an unguarded throw
+        // here is the only way a resource failure can reach the client at all, and it would
+        // otherwise surface as a raw, unformatted exception. Catching it and re-throwing an
+        // `McpError` whose message is `formatQueryError`'s rendering is what `query`, `schema`
+        // and `describe-table` already give the caller for the same class of failure (a
+        // connection drop, most plausibly): the SQLSTATE and detail travel with the message, and
+        // no stack frame does.
+        throw new McpError(ErrorCode.InternalError, formatQueryError(error));
+      }
     },
   );
 

@@ -186,7 +186,9 @@ Two connection strings, both validated in `packages/db/src/env.ts`:
   migrator's advisory locks, and the MCP server's own read-only guarantees are all session-scoped
   and do not survive Supabase's transaction pooler. The MCP server reads inside a read-only
   transaction and cannot write, which is what keeps this section's "the seed has no reset path"
-  safety story coherent even though `DIRECT_DATABASE_URL` may point at the hosted project.
+  safety story coherent even though `DIRECT_DATABASE_URL` may point at the hosted project. Read-only
+  prevents damage, not disclosure, though: pointing this key at a database holding real candidates
+  sends their names, emails and phone numbers into whatever agent context reads them.
 
 ```bash
 cp .env.example .env.local   # fill in both URLs — supabase status prints the local defaults

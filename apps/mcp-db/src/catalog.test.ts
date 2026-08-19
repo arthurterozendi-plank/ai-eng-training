@@ -9,11 +9,13 @@ import {
   shapeEnums,
   shapeForeignKeys,
   shapeIndexes,
+  shapeTriggers,
   UnknownTableError,
   type ColumnRow,
   type EnumRow,
   type ForeignKeyRow,
   type IndexRow,
+  type TriggerRow,
 } from "@/catalog";
 
 // Fixture rows shaped exactly as the SQL constants in src/catalog.ts alias their columns —
@@ -104,6 +106,28 @@ describe("shapeIndexes", () => {
         table: "jobs",
         name: "jobs_status_idx",
         definition: "CREATE INDEX jobs_status_idx ON public.jobs USING btree (status)",
+      },
+    ]);
+  });
+});
+
+describe("shapeTriggers", () => {
+  it("maps each row straight through, carrying pg_get_triggerdef's full definition", () => {
+    const rows: TriggerRow[] = [
+      {
+        table_name: "jobs",
+        trigger_name: "jobs_set_updated_at",
+        definition:
+          "CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+      },
+    ];
+
+    expect(shapeTriggers(rows)).toEqual([
+      {
+        table: "jobs",
+        name: "jobs_set_updated_at",
+        definition:
+          "CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
       },
     ]);
   });

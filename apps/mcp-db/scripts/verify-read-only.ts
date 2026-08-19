@@ -20,7 +20,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { env } from "@talentscout/db/env";
 import postgres from "postgres";
 
-import { COLUMNS_SQL, ENUMS_SQL, FOREIGN_KEYS_SQL, TABLE_NAMES_SQL } from "@/catalog";
+import { COLUMNS_SQL, ENUMS_SQL, FOREIGN_KEYS_SQL, TABLE_NAMES_SQL, TRIGGERS_SQL } from "@/catalog";
 import { formatQueryError, formatQueryResult, MAX_ROWS_DEFAULT } from "@/format";
 import { READ_ONLY_CONNECTION_OPTIONS, runReadOnly, STATEMENT_TIMEOUT_MS } from "@/read-only";
 import type { QueryExecutor } from "@/server";
@@ -197,11 +197,18 @@ async function checkCandidateCountWitness(execute: QueryExecutor): Promise<CaseR
     : fail(name, `expected 60, got ${String(value)}`);
 }
 
-/** AC 3's witness: the live catalog, queried with the exact SQL `src/catalog.ts` uses. */
+/**
+ * AC 3's witness: the live catalog, queried with the exact SQL `src/catalog.ts` uses. The
+ * trigger count is the six `_set_updated_at` triggers the hand-written migration
+ * (`0001_pipeline-stages-seed-and-triggers.sql`) creates — `tgisinternal` excludes the
+ * constraint-enforcement triggers Postgres generates for every foreign key, which is why this
+ * number is 6, not the much larger count `pg_trigger` holds unfiltered (review AI-43 SHOULD 1).
+ */
 async function checkCatalogWitness(execute: QueryExecutor): Promise<CaseResult[]> {
   const tables = await execute(TABLE_NAMES_SQL);
   const columns = await execute(COLUMNS_SQL, [null]);
   const foreignKeys = await execute(FOREIGN_KEYS_SQL, [null]);
+  const triggers = await execute(TRIGGERS_SQL, [null]);
   const enums = await execute(ENUMS_SQL);
   const enumTypeCount = new Set(enums.map((row) => row.enum_name)).size;
 
@@ -209,6 +216,7 @@ async function checkCatalogWitness(execute: QueryExecutor): Promise<CaseResult[]
     { name: "AC3 witness: catalog tables", actual: tables.length, expected: 7 },
     { name: "AC3 witness: catalog columns", actual: columns.length, expected: 71 },
     { name: "AC3 witness: catalog foreign keys", actual: foreignKeys.length, expected: 10 },
+    { name: "AC3 witness: catalog triggers", actual: triggers.length, expected: 6 },
     { name: "AC3 witness: catalog enum types", actual: enumTypeCount, expected: 6 },
   ];
 

@@ -7,7 +7,7 @@
  *
  * A table-name filter is bound as a single `$1::text[]` parameter, `null` meaning "every table" —
  * one query text serves both the filtered and unfiltered case, so no identifier is ever
- * concatenated into these five statements. The three statements that cannot bind an identifier
+ * concatenated into these six statements. The three statements that cannot bind an identifier
  * (an exact row count and a sample-rows query, twice over — once here for `describe-table`, once
  * more in slice 5's `tables` resource) go through {@link quoteValidatedTableName}, the only
  * function in this codebase allowed to put one into SQL.
@@ -79,6 +79,27 @@ order by tablename, indexname
 `.trim();
 
 /**
+ * Every user-defined trigger on a table in `public`, or only those on tables named in the
+ * `$1::text[]` filter. `tgisinternal` excludes the constraint-enforcement triggers Postgres
+ * generates for every foreign key — those already surface through `pg_get_constraintdef` in
+ * {@link FOREIGN_KEYS_SQL}, so listing them again here would be noise, not information.
+ * `pg_get_triggerdef` is what surfaces a trigger's timing, event and function — the hand-written
+ * migration's `_set_updated_at` triggers appear in no Drizzle schema object at all.
+ */
+export const TRIGGERS_SQL = `
+select
+  c.relname as table_name,
+  t.tgname as trigger_name,
+  pg_get_triggerdef(t.oid) as definition
+from pg_trigger t
+join pg_class c on c.oid = t.tgrelid
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and not t.tgisinternal
+  and ($1::text[] is null or c.relname = any($1::text[]))
+order by c.relname, t.tgname
+`.trim();
+
+/**
  * Every value of every enum type in `public`, ordered by declaration order. Not filterable by
  * table — an enum type can back columns on more than one table, and there are only six of them,
  * so `schema` always returns the whole set regardless of its `tables` filter.
@@ -121,6 +142,13 @@ export interface IndexRow {
   definition: string;
 }
 
+/** A row of {@link TRIGGERS_SQL}. */
+export interface TriggerRow {
+  table_name: string;
+  trigger_name: string;
+  definition: string;
+}
+
 /** A row of {@link ENUMS_SQL}. */
 export interface EnumRow {
   enum_name: string;
@@ -150,6 +178,13 @@ export interface ForeignKeyInfo {
 
 /** One index, shaped for `schema` output. */
 export interface IndexInfo {
+  table: string;
+  name: string;
+  definition: string;
+}
+
+/** One trigger, shaped for `schema` output. */
+export interface TriggerInfo {
   table: string;
   name: string;
   definition: string;
@@ -215,6 +250,15 @@ export function shapeIndexes(rows: IndexRow[]): IndexInfo[] {
   return rows.map((row) => ({
     table: row.table_name,
     name: row.index_name,
+    definition: row.definition,
+  }));
+}
+
+/** Maps {@link TRIGGERS_SQL} rows straight through to {@link TriggerInfo}. */
+export function shapeTriggers(rows: TriggerRow[]): TriggerInfo[] {
+  return rows.map((row) => ({
+    table: row.table_name,
+    name: row.trigger_name,
     definition: row.definition,
   }));
 }

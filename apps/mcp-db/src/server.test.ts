@@ -2,7 +2,14 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 
-import { COLUMNS_SQL, ENUMS_SQL, FOREIGN_KEYS_SQL, INDEXES_SQL, TABLE_NAMES_SQL } from "@/catalog";
+import {
+  COLUMNS_SQL,
+  ENUMS_SQL,
+  FOREIGN_KEYS_SQL,
+  INDEXES_SQL,
+  TABLE_NAMES_SQL,
+  TRIGGERS_SQL,
+} from "@/catalog";
 import { createServer, type QueryExecutor } from "@/server";
 
 /** The shape every tool result takes on, content-only (this server declares no `outputSchema`). */
@@ -69,6 +76,7 @@ function createCatalogExecutor(fixture: {
   columns: Record<string, unknown>[];
   foreignKeys: Record<string, unknown>[];
   indexes: Record<string, unknown>[];
+  triggers: Record<string, unknown>[];
   enums: Record<string, unknown>[];
   rowCount: number;
   sampleRows: Record<string, unknown>[];
@@ -89,6 +97,9 @@ function createCatalogExecutor(fixture: {
     }
     if (statement === INDEXES_SQL) {
       return fixture.indexes;
+    }
+    if (statement === TRIGGERS_SQL) {
+      return fixture.triggers;
     }
     if (statement === ENUMS_SQL) {
       return fixture.enums;
@@ -222,6 +233,14 @@ describe("schema tool", () => {
       definition: "CREATE INDEX jobs_status_idx ON public.jobs USING btree (status)",
     },
   ];
+  const fixtureTriggers = [
+    {
+      table_name: "jobs",
+      trigger_name: "jobs_set_updated_at",
+      definition:
+        "CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+    },
+  ];
   const fixtureEnums = [
     { enum_name: "job_status", value: "draft" },
     { enum_name: "job_status", value: "open" },
@@ -233,6 +252,7 @@ describe("schema tool", () => {
       columns: fixtureColumns,
       foreignKeys: fixtureForeignKeys,
       indexes: fixtureIndexes,
+      triggers: fixtureTriggers,
       enums: fixtureEnums,
       rowCount: 0,
       sampleRows: [],
@@ -254,7 +274,7 @@ describe("schema tool", () => {
     });
   });
 
-  it("returns a foreign-key definition and an enum type when no tables filter is given", async () => {
+  it("returns a foreign-key definition, a trigger definition and an enum type when no tables filter is given", async () => {
     const { execute, calls } = buildExecutor();
     const client = await connectedClient(execute);
 
@@ -263,6 +283,7 @@ describe("schema tool", () => {
     expect(result.isError).toBeFalsy();
     const text = textOf(result);
     expect(text).toContain("REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE RESTRICT");
+    expect(text).toContain("CREATE TRIGGER jobs_set_updated_at");
     expect(text).toContain("job_status");
 
     // Absent a `tables` argument, the filter queries still run through the same bound
@@ -278,9 +299,9 @@ describe("schema tool", () => {
     await callTool(client, "schema", { tables: ["jobs"] });
 
     const filterCalls = calls.filter((call) =>
-      [COLUMNS_SQL, FOREIGN_KEYS_SQL, INDEXES_SQL].includes(call.statement),
+      [COLUMNS_SQL, FOREIGN_KEYS_SQL, INDEXES_SQL, TRIGGERS_SQL].includes(call.statement),
     );
-    expect(filterCalls).toHaveLength(3);
+    expect(filterCalls).toHaveLength(4);
     for (const call of filterCalls) {
       expect(call.params).toEqual([["jobs"]]);
       expect(call.statement).not.toContain("jobs");
@@ -301,6 +322,20 @@ describe("schema tool", () => {
     // Rejected before any catalog filter query ran — the only call is the table-name listing
     // itself, which never contains the argument that failed validation against it.
     expect(calls.some((call) => call.statement.includes("no_such_table"))).toBe(false);
+  });
+
+  it("returns isError: true for an empty tables array, rather than a silent empty result (review AI-43 NIT 3)", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await callTool(client, "schema", { tables: [] });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Too small");
+
+    // Rejected by input validation before any catalog query ran at all — never reaching the
+    // `= any('{}')` filter that would otherwise match nothing.
+    expect(calls).toHaveLength(0);
   });
 });
 
@@ -332,6 +367,7 @@ describe("describe-table tool", () => {
       columns: fixtureColumns,
       foreignKeys: [],
       indexes: [],
+      triggers: [],
       enums: [],
       rowCount: 8,
       sampleRows: fixtureSampleRows,
@@ -563,6 +599,22 @@ describe("tables resource", () => {
       expect(
         countCalls.some((call) => call.statement === `select count(*) as n from "${table}"`),
       ).toBe(true);
+    }
+  });
+
+  it("rejects with an error carrying the Postgres message and SQLSTATE, and no stack frame, when execute throws (review AI-43 NIT 4)", async () => {
+    const execute: QueryExecutor = () =>
+      Promise.reject(postgresError("connection terminated unexpectedly", "57P01"));
+    const client = await connectedClient(execute);
+
+    try {
+      await client.readResource({ uri: "talentscout://tables" });
+      expect.unreachable();
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("connection terminated unexpectedly");
+      expect(message).toContain("57P01");
+      expect(message).not.toContain("    at ");
     }
   });
 });
