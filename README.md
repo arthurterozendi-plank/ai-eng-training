@@ -101,7 +101,7 @@ packages/
 
 **Two convention tiers.** The root `CLAUDE.md` holds rules that apply everywhere; the two folder
 `CLAUDE.md` files above hold the module-local detail it leaves out, and load when Claude reads any
-file in that folder's **subtree** — neither directory has a file sitting directly inside it.
+file in that folder's **subtree** — no _source_ file sits directly inside either.
 
 Import alias: `@/*` maps to the **current workspace's** `src/*`. Across workspaces, import by
 package name — `@talentscout/db/schema/jobs` — never by a relative path that climbs out of one

@@ -38,8 +38,9 @@ export { StatusBadge };
 
 The one contract the root does not state: destructure `className`, merge it **last** through
 `cn(base, className)` so a caller's class wins a Tailwind conflict, and spread `...props` onto the
-root element so any prop the intrinsic tag accepts still works. Every real component here does
-this (`job-card.tsx:13-25`, `candidate-profile.tsx:63-68`, `ui/button.tsx:56-63`).
+root element so any prop the intrinsic tag accepts still works. Both components that take a
+`className` do this (`job-card.tsx:13-25`, `candidate-profile.tsx:63-68`); `settings-form` takes no
+props and `theme-toggle` forwards to `<Button>` without merging one of its own.
 
 ## B. Local facts
 
@@ -50,11 +51,11 @@ this (`job-card.tsx:13-25`, `candidate-profile.tsx:63-68`, `ui/button.tsx:56-63`
 | Props take rich types (`Date`, `PipelineStageKey`); the page converts, the component does not                                                                              | `candidate-profile.tsx:36` takes `Date`; `candidates/[id]/page.tsx:60` passes one |
 | An absent optional field renders nothing — return `null`, do not render an empty row                                                                                       | `candidate-profile.tsx:149-160`                                                   |
 | An empty collection gets explicit copy, not a blank region                                                                                                                 | `candidate-profile.tsx:88` ("No applications yet.")                               |
-| Bottom named export — `function X() {} … export { X }`. **`job-card.tsx` and `settings-form.tsx` use `export function` instead, a known deviation, not the shape to copy** | D-5; `ui/button.tsx:67`, `candidate-profile.tsx:184`                              |
+| Bottom named export — `function X() {} … export { X }`. **`job-card.tsx` and `settings-form.tsx` use `export function` instead, a known deviation, not the shape to copy** | `ui/button.tsx:67`, `candidate-profile.tsx:184`                                   |
 
 ## C. Hydration and determinism
 
-Three separate comments in this codebase exist because someone was bitten by one of these. Each
+Four separate comments in this codebase exist because someone was bitten by one of these. Each
 rule below carries the reason, not just the instruction.
 
 - Build `Intl.*Format` formatters once at module scope, never inside the render body —
@@ -94,10 +95,8 @@ The push-down this proves: `settings/page.tsx` is a Server Component whose only 
 
 ## F. Do not
 
-- Do not add `"use client"` to a component that only renders its props. Check the module itself,
-  not its children — a Server Component may render a Client Component.
-- Do not add `"use client"` to a page or layout just to make one leaf interactive. Move the leaf
-  out into its own component instead.
+- Check the module itself, not its children, for whether `"use client"` is needed — a Server
+  Component may render a Client Component.
 - Do not sort, `push`, `splice`, or otherwise mutate an array that arrived as a prop. Copy it
   first, and tie-break the sort so rows with equal keys render in the same order every time
   instead of depending on input order (`candidate-profile.tsx:57-58,105-110`).

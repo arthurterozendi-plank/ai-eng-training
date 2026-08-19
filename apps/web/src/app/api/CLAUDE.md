@@ -62,6 +62,8 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json(body, { status: 400, headers: NO_STORE });
   }
 
+  // TODO: authorization
+
   try {
     // TODO: replace with the real read; parsed.data is typed as WidgetsSearchParams.
     const widgets: unknown[] = [];
@@ -79,9 +81,9 @@ export async function GET(request: Request): Promise<Response> {
 
 Show:
 
-- `Request` in, `Response.json()` out — never `NextRequest`/`NextResponse`. All three real routes
-  do this (`jobs/route.ts:83`, `candidates/[id]/route.ts:10-11`), which is what lets a test build
-  a plain `new Request(...)` with no server (Section C).
+- `Request` in, `Response.json()` out. Both routes that read input do this (`jobs/route.ts:83`,
+  `candidates/[id]/route.ts:10-11`); `status/route.ts` takes no argument at all — which is what
+  lets a test build a plain `new Request(...)` with no server (Section C).
 - `safeParse` and an early `400`, before any I/O. Both route tests assert the database was never
   touched on a `400` (`jobs/route.test.ts:153`, `candidates/[id]/route.test.ts:132`).
 - `try`/`catch` around the read, `console.error` with a `<METHOD> /api/<path>` prefix, and a
@@ -97,7 +99,7 @@ Show:
 | A list endpoint caps its result set with an exported `MAX_*` constant — never unbounded                                                                                                                               | `jobs/schema.ts:4,14` and its JSDoc                                 |
 | Project columns at the query and map the response field by field                                                                                                                                                      | `candidates/[id]/route.ts:31,53-83`                                 |
 | A `Date` becomes an ISO string at the wire boundary via `.toISOString()`                                                                                                                                              | `candidates/[id]/route.ts:65-66`                                    |
-| An endpoint with no input has no `schema.ts` — the documented exception to R-A1                                                                                                                                       | `status/` has only `route.ts` + `route.test.ts`                     |
+| An endpoint with no input has no `schema.ts` — the exception to the root's one-directory-per-endpoint rule                                                                                                            | `status/` has only `route.ts` + `route.test.ts`                     |
 | **A fact, not a convention:** no auth scheme exists yet and no ticket owns one, so routes ship unauthenticated with `// TODO: authorization` after validation. Do not invent a scheme and do not read this as settled | `candidates/[id]/route.ts:26`                                       |
 | `console.error`/`console.warn` are allowed; `console.log`/`console.debug` fail `/pre-deploy`                                                                                                                          | `.claude/skills/pre-deploy/scripts/check-console.sh`                |
 | Errors use the exported `ErrorResponse` populated with `z.treeifyError`. **`jobs/route.ts` hand-maps its own `issues` array instead — a known deviation, not the shape to copy**                                      | `candidates/[id]/schema.ts:42-46` vs `jobs/route.ts:92-95`          |
@@ -122,11 +124,11 @@ Show:
 
 - Do not spread a database row into a response. `resumeText` is the RAG-sized body and
   `changedBy` is internal; both exist on rows the routes return.
-- Do not put the error string from a caught exception into the response body — a connection error
-  carries the connection string. `jobs/route.test.ts:159-165` asserts exactly this.
-- Do not cast a search param instead of parsing it — they arrive as strings, so a bare cast makes
-  `limit=abc` a `NaN` that reaches the query (`jobs/route.ts:84-86`, `jobs/route.test.ts:147-155`).
-  Nothing is said here about request bodies: every handler in this repo is a `GET` and none calls
+- The `500` body is generic because a connection error's message carries the connection string —
+  `jobs/route.test.ts:159-165` asserts it.
+- Search params arrive as strings, so a bare cast (instead of `safeParse`) makes `limit=abc` a
+  `NaN` that reaches the query (`jobs/route.ts:84-86`, `jobs/route.test.ts:147-155`). Nothing is
+  said here about request bodies: every handler in this repo is a `GET` and none calls
   `request.json()` — there is no real body-handling code yet to point at. `/api-route` already
   covers the malformed-JSON branch for the first route that needs one.
 - Do not reach for `NextRequest`/`NextResponse`, `res.status().json()`, or a Pages-router shape.
@@ -136,4 +138,4 @@ Show:
   directly, the way `jobs/page.tsx` imports `loadOpenJobs` from `route.ts`
   (`apps/web/src/app/jobs/page.tsx:5`).
 - Do not add `export const revalidate` / `fetchCache` / `dynamicParams` to a handler as "cache
-  safety". They are unrelated to the two things R-A6 asks for.
+  safety". They are unrelated to `force-dynamic` and `Cache-Control: no-store`.

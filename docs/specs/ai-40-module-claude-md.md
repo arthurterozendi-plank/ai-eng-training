@@ -6,7 +6,7 @@
 **Status:** specced; hardened rounds 1–3 (CHANGES_REQUESTED each; all sixteen findings
 dispositioned in §7.1–7.3). The r3 BLOCKER — that the subtree-load premise was inferred rather
 than measured — was settled by direct probe and the premise **holds**; §2 now cites the
-experiment. Awaiting implementation. No blocking escalations.
+experiment. Implemented; addressing review-round-1 findings. No blocking escalations.
 
 ---
 
