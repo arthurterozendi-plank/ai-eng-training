@@ -15,10 +15,22 @@ import { env } from "@talentscout/db/env";
 import { createReadOnlyExecutor } from "./read-only";
 import { createServer } from "./server";
 
+/**
+ * Prints the target host, port and database — never the password or the full connection string
+ * — to stderr, naming the key ({@link env.DIRECT_DATABASE_URL}) alongside them. This is RISK-1's
+ * mitigation: the moment this variable points at a database holding real candidates rather than
+ * the local seed, that must be visible on every start, not only in a diff.
+ */
+function logReadyBanner(connectionString: string): void {
+  const { hostname, port, pathname } = new URL(connectionString);
+  console.error(`[talentscout-db] ready — DIRECT_DATABASE_URL ${hostname}:${port}${pathname}`);
+}
+
 async function main(): Promise<void> {
   const execute = createReadOnlyExecutor(env.DIRECT_DATABASE_URL);
   const server = createServer(execute);
   await server.connect(new StdioServerTransport());
+  logReadyBanner(env.DIRECT_DATABASE_URL);
 }
 
 main().catch((error: unknown) => {
