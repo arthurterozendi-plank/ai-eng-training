@@ -31,12 +31,23 @@ const serverSchema = z.object({
 
 const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.url().default("http://localhost:3000"),
+  // Not a secret: PostHog project API keys are write-only ingestion tokens designed to sit in
+  // the browser bundle. Optional because analytics must stay off, not broken, until a project
+  // exists — see .env.example.
+  NEXT_PUBLIC_POSTHOG_KEY: z.string().trim().min(1).optional(),
+  // The ingestion host only, not the private REST API host. Defaults to the US region.
+  NEXT_PUBLIC_POSTHOG_HOST: z.url().default("https://us.i.posthog.com"),
 });
 
 // Literal property access is required: Next.js replaces `process.env.NEXT_PUBLIC_*`
 // at build time only for statically analyzable references.
 const clientRuntime = {
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  // `|| undefined` normalizes a bare `KEY=` line in .env.local to absent: zod's `.optional()`
+  // and `.default()` both reject `""` outright, so an empty value would otherwise throw instead
+  // of falling back to "unset".
+  NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY || undefined,
+  NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST || undefined,
 };
 
 function parse<T extends z.ZodType>(schema: T, source: unknown, label: string): z.infer<T> {

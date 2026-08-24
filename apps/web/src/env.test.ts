@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "@/env";
 
@@ -12,5 +14,86 @@ describe("env", () => {
 
   it("falls back to the default NEXT_PUBLIC_APP_URL", () => {
     expect(env.NEXT_PUBLIC_APP_URL).toBe("http://localhost:3000");
+  });
+
+  it("leaves NEXT_PUBLIC_POSTHOG_KEY unset and defaults NEXT_PUBLIC_POSTHOG_HOST when neither is set", () => {
+    expect(env.NEXT_PUBLIC_POSTHOG_KEY).toBeUndefined();
+    expect(env.NEXT_PUBLIC_POSTHOG_HOST).toBe("https://us.i.posthog.com");
+  });
+});
+
+describe("env (module re-evaluated with stubbed variables)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("normalizes an empty NEXT_PUBLIC_POSTHOG_KEY and NEXT_PUBLIC_POSTHOG_HOST to absent, rather than throwing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "");
+    vi.resetModules();
+
+    const { env: reloadedEnv } = await import("@/env");
+
+    expect(reloadedEnv.NEXT_PUBLIC_POSTHOG_KEY).toBeUndefined();
+    expect(reloadedEnv.NEXT_PUBLIC_POSTHOG_HOST).toBe("https://us.i.posthog.com");
+  });
+
+  it("trims surrounding whitespace from NEXT_PUBLIC_POSTHOG_KEY", async () => {
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "  phc_x  ");
+    vi.resetModules();
+
+    const { env: reloadedEnv } = await import("@/env");
+
+    expect(reloadedEnv.NEXT_PUBLIC_POSTHOG_KEY).toBe("phc_x");
+  });
+
+  it("throws EnvValidationError when NEXT_PUBLIC_POSTHOG_HOST has no scheme", async () => {
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "eu.i.posthog.com");
+    vi.resetModules();
+
+    // `vi.resetModules()` re-evaluates "@/env" in a fresh module registry, so the class object
+    // it throws is not `instanceof`-equal to the `EnvValidationError` imported at the top of
+    // this file — matching by `.name` is what the pre-reset reference cannot do.
+    await expect(import("@/env")).rejects.toMatchObject({ name: "EnvValidationError" });
+  });
+});
+
+describe("process.env convention", () => {
+  /**
+   * Every file under apps/web/src, test files excluded, walked recursively. AC 2 requires
+   * `@/env` to be the single place that reads `process.env` — a source scan is the only check
+   * that can catch a future module reaching around the convention instead of importing the
+   * validated value.
+   */
+  function collectSourceFiles(dir: string): string[] {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const files: string[] = [];
+
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        files.push(...collectSourceFiles(entryPath));
+        continue;
+      }
+
+      if (/\.(test|spec)\.(ts|tsx)$/.test(entry.name)) continue;
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+
+      files.push(entryPath);
+    }
+
+    return files;
+  }
+
+  it("only src/env.ts reads process.env", () => {
+    const srcDir = import.meta.dirname;
+    const offenders = collectSourceFiles(srcDir).filter((file) => {
+      if (path.relative(srcDir, file) === "env.ts") return false;
+      return fs.readFileSync(file, "utf-8").includes("process.env");
+    });
+
+    expect(offenders).toEqual([]);
   });
 });
