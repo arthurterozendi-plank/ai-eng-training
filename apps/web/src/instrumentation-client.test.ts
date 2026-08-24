@@ -30,29 +30,6 @@ describe("static import guard (instrumentation-client.ts)", () => {
     "utf-8",
   );
 
-  function staticImportLines(moduleSpecifier: string): string[] {
-    return source
-      .split("\n")
-      .filter((line) => new RegExp(`from ["']${moduleSpecifier}["']`).test(line))
-      .map((line) => line.trim());
-  }
-
-  it("has no value-level static import of posthog-js", () => {
-    const lines = staticImportLines("posthog-js");
-
-    for (const line of lines) {
-      expect(line).toMatch(/^import type /);
-    }
-  });
-
-  it("has no value-level static import of @/env", () => {
-    const lines = staticImportLines("@/env");
-
-    for (const line of lines) {
-      expect(line).toMatch(/^import type /);
-    }
-  });
-
   it("imports only @/lib/analytics", () => {
     const importLines = source
       .split("\n")
