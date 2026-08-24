@@ -52,9 +52,10 @@ describe("env (module re-evaluated with stubbed variables)", () => {
     vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "eu.i.posthog.com");
     vi.resetModules();
 
-    // `vi.resetModules()` re-evaluates "@/env" in a fresh module registry, so the class object
-    // it throws is not `instanceof`-equal to the `EnvValidationError` imported at the top of
-    // this file — matching by `.name` is what the pre-reset reference cannot do.
+    // `vi.resetModules()` re-evaluates "@/env" in a fresh module registry, so the `EnvValidationError`
+    // class it throws is a different class object than the one that module registry's earlier
+    // evaluation would have produced — an `instanceof` check would need that same reference, which
+    // this test never imports. Matching by `.name` is what works across the reset instead.
     await expect(import("@/env")).rejects.toMatchObject({ name: "EnvValidationError" });
   });
 });

@@ -164,30 +164,20 @@ describe("static import guard (analytics.ts)", () => {
    * scope with no `try` of its own before hydration, so a static import that throws here is
    * uncatchable and costs the whole app its hydration (spec §2, §3.3). This is the check DoD 6
    * cannot see: DoD 6 injects `deps` and never exercises the real import style.
+   *
+   * Exhaustive equality, mirroring `instrumentation-client.test.ts`'s own guard, not a
+   * `from "…"` regex: a regex over `from` only matches imports that bind a name, so a bare
+   * side-effect `import "posthog-js";` — value-level, uncatchable at runtime, exactly the
+   * failure mode this guard exists to prevent — slips straight through it.
    */
   const source = fs.readFileSync(path.join(import.meta.dirname, "analytics.ts"), "utf-8");
 
-  function staticImportLines(moduleSpecifier: string): string[] {
-    return source
+  it("has exactly one static import: posthog-js's types", () => {
+    const importLines = source
       .split("\n")
-      .filter((line) => new RegExp(`from ["']${moduleSpecifier}["']`).test(line))
+      .filter((line) => /^import /.test(line.trim()))
       .map((line) => line.trim());
-  }
 
-  it("imports posthog-js only as import type", () => {
-    const lines = staticImportLines("posthog-js");
-
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) {
-      expect(line).toMatch(/^import type /);
-    }
-  });
-
-  it("has no value-level static import of @/env", () => {
-    const lines = staticImportLines("@/env");
-
-    for (const line of lines) {
-      expect(line).toMatch(/^import type /);
-    }
+    expect(importLines).toEqual([`import type { PostHogConfig } from "posthog-js";`]);
   });
 });
