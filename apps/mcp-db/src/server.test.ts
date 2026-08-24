@@ -1,0 +1,620 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { describe, expect, it } from "vitest";
+
+import {
+  COLUMNS_SQL,
+  ENUMS_SQL,
+  FOREIGN_KEYS_SQL,
+  INDEXES_SQL,
+  TABLE_NAMES_SQL,
+  TRIGGERS_SQL,
+} from "@/catalog";
+import { createServer, type QueryExecutor } from "@/server";
+
+/** The shape every tool result takes on, content-only (this server declares no `outputSchema`). */
+interface QueryToolResult {
+  isError?: boolean;
+  content: { type: string; text: string }[];
+}
+
+/** One recorded call: the exact statement text `execute` was given, and its bind parameters. */
+interface RecordedCall {
+  statement: string;
+  params?: unknown[];
+}
+
+/**
+ * A `postgres`-shaped error: a real `Error` (so `.stack` is populated, the way a thrown
+ * `PostgresError` would be) carrying the extra fields {@link formatQueryError} reads by name.
+ */
+function postgresError(message: string, code: string, position?: string): Error {
+  return Object.assign(new Error(message), { code, position });
+}
+
+/**
+ * Links a fresh `createServer(execute)` to a fresh `Client` over `InMemoryTransport.
+ * createLinkedPair()` and connects both ends — no subprocess, no database (AI-43 §2, §5 slice 3).
+ */
+async function connectedClient(execute: QueryExecutor): Promise<Client> {
+  const server = createServer(execute);
+  const client = new Client({ name: "test-client", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+  return client;
+}
+
+async function callTool(
+  client: Client,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<QueryToolResult> {
+  const result = await client.callTool({ name, arguments: args });
+  return result as unknown as QueryToolResult;
+}
+
+async function callQuery(client: Client, args: Record<string, unknown>): Promise<QueryToolResult> {
+  return callTool(client, "query", args);
+}
+
+function textOf(result: QueryToolResult): string {
+  return result.content[0]!.text;
+}
+
+/**
+ * A fake `execute` for the catalog tools: it recognises the catalog SQL constants by exact text
+ * (the same constants `src/catalog.ts` and `src/server.ts` import) and answers each with fixture
+ * rows, recording every call it sees. `countRowsSql` / `sampleRowsSql` output is matched by
+ * prefix, since those two are built from a quoted identifier at call time rather than being a
+ * fixed constant — the property under test is exactly that they carry `quotedTable` and nothing
+ * from the caller's raw, unvalidated argument.
+ */
+function createCatalogExecutor(fixture: {
+  tables: string[];
+  columns: Record<string, unknown>[];
+  foreignKeys: Record<string, unknown>[];
+  indexes: Record<string, unknown>[];
+  triggers: Record<string, unknown>[];
+  enums: Record<string, unknown>[];
+  rowCount: number;
+  sampleRows: Record<string, unknown>[];
+}): { execute: QueryExecutor; calls: RecordedCall[] } {
+  const calls: RecordedCall[] = [];
+
+  const execute: QueryExecutor = async (statement, params) => {
+    calls.push({ statement, params });
+
+    if (statement === TABLE_NAMES_SQL) {
+      return fixture.tables.map((table_name) => ({ table_name }));
+    }
+    if (statement === COLUMNS_SQL) {
+      return fixture.columns;
+    }
+    if (statement === FOREIGN_KEYS_SQL) {
+      return fixture.foreignKeys;
+    }
+    if (statement === INDEXES_SQL) {
+      return fixture.indexes;
+    }
+    if (statement === TRIGGERS_SQL) {
+      return fixture.triggers;
+    }
+    if (statement === ENUMS_SQL) {
+      return fixture.enums;
+    }
+    if (statement.startsWith("select count(*)")) {
+      return [{ n: fixture.rowCount }];
+    }
+    if (statement.startsWith("select * from")) {
+      return fixture.sampleRows;
+    }
+
+    throw new Error(`createCatalogExecutor: unexpected statement: ${statement}`);
+  };
+
+  return { execute, calls };
+}
+
+describe("createServer", () => {
+  it("registers query with the read-only annotations", async () => {
+    const client = await connectedClient(() => Promise.resolve([]));
+
+    const { tools } = await client.listTools();
+    const query = tools.find((tool) => tool.name === "query");
+
+    expect(query).toBeDefined();
+    expect(query?.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+  });
+
+  it("renders a truncated result's header with the shown count, the exact total, and the cap", async () => {
+    const rows = Array.from({ length: 299 }, (_, id) => ({ id }));
+    const client = await connectedClient(() => Promise.resolve(rows));
+
+    const result = await callQuery(client, {
+      sql: "select id from application_stage_transitions",
+      maxRows: 100,
+    });
+
+    expect(result.isError).toBeFalsy();
+    const text = textOf(result);
+    expect(text).toContain("100");
+    expect(text).toContain("299");
+    expect(text.toLowerCase()).toContain("truncat");
+  });
+
+  it("renders a singular header for exactly one row", async () => {
+    const client = await connectedClient(() => Promise.resolve([{ id: 1 }]));
+
+    const result = await callQuery(client, { sql: "select 1" });
+
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result).startsWith("1 row.")).toBe(true);
+  });
+
+  it("returns isError: true carrying the message and SQLSTATE, with no stack frame, when execute throws", async () => {
+    const client = await connectedClient(() =>
+      Promise.reject(postgresError('syntax error at or near "slect"', "42601", "1")),
+    );
+
+    const result = await callQuery(client, { sql: "slect 1" });
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text).toContain('syntax error at or near "slect"');
+    expect(text).toContain("42601");
+    expect(text).not.toContain("    at ");
+  });
+
+  describe("input validation — land-mine 6: rejected arguments resolve with isError, never a throw", () => {
+    it("returns isError: true for a non-string sql", async () => {
+      const client = await connectedClient(() => Promise.resolve([]));
+
+      const result = await callQuery(client, { sql: 42 });
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("Invalid input: expected string");
+    });
+
+    it("returns isError: true for maxRows below the minimum", async () => {
+      const client = await connectedClient(() => Promise.resolve([]));
+
+      const result = await callQuery(client, { sql: "select 1", maxRows: 0 });
+
+      expect(result.isError).toBe(true);
+    });
+
+    it("returns isError: true for maxRows above MAX_ROWS_CEILING", async () => {
+      const client = await connectedClient(() => Promise.resolve([]));
+
+      const result = await callQuery(client, { sql: "select 1", maxRows: 1001 });
+
+      expect(result.isError).toBe(true);
+    });
+  });
+});
+
+describe("schema tool", () => {
+  const validTables = ["jobs", "candidates", "applications"];
+  const fixtureColumns = [
+    {
+      table_name: "jobs",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: "gen_random_uuid()",
+    },
+    {
+      table_name: "jobs",
+      column_name: "status",
+      ordinal_position: 2,
+      data_type: "job_status",
+      is_nullable: false,
+      column_default: "'open'::job_status",
+    },
+  ];
+  const fixtureForeignKeys = [
+    {
+      table_name: "applications",
+      constraint_name: "applications_job_id_fk",
+      definition: "FOREIGN KEY (job_id) REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE RESTRICT",
+    },
+  ];
+  const fixtureIndexes = [
+    {
+      table_name: "jobs",
+      index_name: "jobs_status_idx",
+      definition: "CREATE INDEX jobs_status_idx ON public.jobs USING btree (status)",
+    },
+  ];
+  const fixtureTriggers = [
+    {
+      table_name: "jobs",
+      trigger_name: "jobs_set_updated_at",
+      definition:
+        "CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+    },
+  ];
+  const fixtureEnums = [
+    { enum_name: "job_status", value: "draft" },
+    { enum_name: "job_status", value: "open" },
+  ];
+
+  function buildExecutor() {
+    return createCatalogExecutor({
+      tables: validTables,
+      columns: fixtureColumns,
+      foreignKeys: fixtureForeignKeys,
+      indexes: fixtureIndexes,
+      triggers: fixtureTriggers,
+      enums: fixtureEnums,
+      rowCount: 0,
+      sampleRows: [],
+    });
+  }
+
+  it("registers schema with the read-only annotations", async () => {
+    const { execute } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const { tools } = await client.listTools();
+    const schema = tools.find((tool) => tool.name === "schema");
+
+    expect(schema).toBeDefined();
+    expect(schema?.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+  });
+
+  it("returns a foreign-key definition, a trigger definition and an enum type when no tables filter is given", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await callTool(client, "schema", {});
+
+    expect(result.isError).toBeFalsy();
+    const text = textOf(result);
+    expect(text).toContain("REFERENCES jobs(id) ON UPDATE CASCADE ON DELETE RESTRICT");
+    expect(text).toContain("CREATE TRIGGER jobs_set_updated_at");
+    expect(text).toContain("job_status");
+
+    // Absent a `tables` argument, the filter queries still run through the same bound
+    // parameter — null, meaning "every table" — rather than a second, unfiltered query text.
+    const columnsCall = calls.find((call) => call.statement === COLUMNS_SQL);
+    expect(columnsCall?.params).toEqual([null]);
+  });
+
+  it("binds the tables filter as a parameter to every catalog filter query, never concatenating it", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    await callTool(client, "schema", { tables: ["jobs"] });
+
+    const filterCalls = calls.filter((call) =>
+      [COLUMNS_SQL, FOREIGN_KEYS_SQL, INDEXES_SQL, TRIGGERS_SQL].includes(call.statement),
+    );
+    expect(filterCalls).toHaveLength(4);
+    for (const call of filterCalls) {
+      expect(call.params).toEqual([["jobs"]]);
+      expect(call.statement).not.toContain("jobs");
+    }
+  });
+
+  it("returns isError: true naming the unknown table and a real one, for an unrecognised entry in tables", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await callTool(client, "schema", { tables: ["no_such_table"] });
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text).toContain("no_such_table");
+    expect(text).toContain("jobs");
+
+    // Rejected before any catalog filter query ran — the only call is the table-name listing
+    // itself, which never contains the argument that failed validation against it.
+    expect(calls.some((call) => call.statement.includes("no_such_table"))).toBe(false);
+  });
+
+  it("returns isError: true for an empty tables array, rather than a silent empty result (review AI-43 NIT 3)", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await callTool(client, "schema", { tables: [] });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain("Too small");
+
+    // Rejected by input validation before any catalog query ran at all — never reaching the
+    // `= any('{}')` filter that would otherwise match nothing.
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("describe-table tool", () => {
+  const validTables = ["jobs", "candidates"];
+  const fixtureColumns = [
+    {
+      table_name: "jobs",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: "gen_random_uuid()",
+    },
+    {
+      table_name: "jobs",
+      column_name: "title",
+      ordinal_position: 2,
+      data_type: "text",
+      is_nullable: false,
+      column_default: null,
+    },
+  ];
+  const fixtureSampleRows = [{ id: "d3f0c1bd", title: "Senior Backend Engineer" }];
+
+  function buildExecutor() {
+    return createCatalogExecutor({
+      tables: validTables,
+      columns: fixtureColumns,
+      foreignKeys: [],
+      indexes: [],
+      triggers: [],
+      enums: [],
+      rowCount: 8,
+      sampleRows: fixtureSampleRows,
+    });
+  }
+
+  it("registers describe-table with the read-only annotations", async () => {
+    const { execute } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const { tools } = await client.listTools();
+    const describeTable = tools.find((tool) => tool.name === "describe-table");
+
+    expect(describeTable).toBeDefined();
+    expect(describeTable?.annotations).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+  });
+
+  it("returns the exact row count and sampleRows sample rows for a known table", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await callTool(client, "describe-table", { table: "jobs" });
+
+    expect(result.isError).toBeFalsy();
+    const payload = JSON.parse(textOf(result)) as {
+      rowCount: number;
+      sampleRows: unknown[];
+      columns: unknown[];
+    };
+    expect(payload.rowCount).toBe(8);
+    expect(payload.sampleRows).toEqual(fixtureSampleRows);
+    expect(payload.columns).toHaveLength(2);
+
+    // The count and sample queries carry the quoted identifier, built only after "jobs" was
+    // validated against the live listing — never a bare bind parameter standing in for it.
+    const countCall = calls.find((call) => call.statement.startsWith("select count(*)"));
+    expect(countCall?.statement).toBe('select count(*) as n from "jobs"');
+    const sampleCall = calls.find((call) => call.statement.startsWith("select * from"));
+    expect(sampleCall?.statement).toBe('select * from "jobs" limit $1');
+    expect(sampleCall?.params).toEqual([5]);
+  });
+
+  it("returns isError: true naming the unknown table and a real one, and records zero statements containing the argument, for a table absent from the catalog fixture", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await callTool(client, "describe-table", { table: "no_such_table" });
+
+    expect(result.isError).toBe(true);
+    const text = textOf(result);
+    expect(text).toContain("no_such_table");
+    expect(text).toContain("jobs");
+    expect(calls.some((call) => call.statement.includes("no_such_table"))).toBe(false);
+  });
+
+  it("rejects a table argument carrying a quote and a semicolon without ever interpolating it into a statement", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+    const malicious = 'jobs"; drop table candidates; --';
+
+    const result = await callTool(client, "describe-table", { table: malicious });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain(malicious);
+    expect(calls.some((call) => call.statement.includes(malicious))).toBe(false);
+    expect(calls.some((call) => call.statement.toLowerCase().includes("drop table"))).toBe(false);
+  });
+
+  describe("input validation — land-mine 6: rejected arguments resolve with isError, never a throw", () => {
+    it("returns isError: true for a non-string table", async () => {
+      const { execute } = buildExecutor();
+      const client = await connectedClient(execute);
+
+      const result = await callTool(client, "describe-table", { table: 42 });
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("Invalid input: expected string");
+    });
+
+    it("returns isError: true for sampleRows above the maximum", async () => {
+      const { execute } = buildExecutor();
+      const client = await connectedClient(execute);
+
+      const result = await callTool(client, "describe-table", { table: "jobs", sampleRows: 21 });
+
+      expect(result.isError).toBe(true);
+    });
+  });
+});
+
+describe("tables resource", () => {
+  const validTables = ["jobs", "candidates", "applications"];
+  const fixtureColumns = [
+    {
+      table_name: "jobs",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "jobs",
+      column_name: "title",
+      ordinal_position: 2,
+      data_type: "text",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "candidates",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "applications",
+      column_name: "id",
+      ordinal_position: 1,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "applications",
+      column_name: "job_id",
+      ordinal_position: 2,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+    {
+      table_name: "applications",
+      column_name: "candidate_id",
+      ordinal_position: 3,
+      data_type: "uuid",
+      is_nullable: false,
+      column_default: null,
+    },
+  ];
+  const fixtureRowCounts: Record<string, number> = { jobs: 8, candidates: 60, applications: 90 };
+
+  /**
+   * A fake `execute` distinguishing each table's exact `count(*)` by the quoted identifier
+   * `countRowsSql` built it from, so the test can tell the resource wired each table to its own
+   * count rather than reusing one value across all of them.
+   */
+  function buildExecutor(): { execute: QueryExecutor; calls: RecordedCall[] } {
+    const calls: RecordedCall[] = [];
+
+    const execute: QueryExecutor = async (statement, params) => {
+      calls.push({ statement, params });
+
+      if (statement === TABLE_NAMES_SQL) {
+        return validTables.map((table_name) => ({ table_name }));
+      }
+      if (statement === COLUMNS_SQL) {
+        return fixtureColumns;
+      }
+      if (statement.startsWith("select count(*)")) {
+        const table = validTables.find(
+          (name) => statement === `select count(*) as n from "${name}"`,
+        );
+        return [{ n: table ? fixtureRowCounts[table] : 0 }];
+      }
+
+      throw new Error(`tables resource executor: unexpected statement: ${statement}`);
+    };
+
+    return { execute, calls };
+  }
+
+  it("lists talentscout://tables with a name and a description", async () => {
+    const { execute } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const { resources } = await client.listResources();
+    const tables = resources.find((resource) => resource.uri === "talentscout://tables");
+
+    expect(tables).toBeDefined();
+    expect(tables?.name).toBeTruthy();
+    expect(tables?.description).toBeTruthy();
+  });
+
+  it("reads talentscout://tables as application/json with one entry per table, carrying its column count and exact row count", async () => {
+    const { execute } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    const result = await client.readResource({ uri: "talentscout://tables" });
+
+    expect(result.contents).toHaveLength(1);
+    const [content] = result.contents;
+    if (!content || !("text" in content)) {
+      throw new Error("expected a text resource content");
+    }
+    expect(content.mimeType).toBe("application/json");
+
+    const payload = JSON.parse(content.text) as {
+      table: string;
+      columnCount: number;
+      rowCount: number;
+    }[];
+
+    expect(payload).toHaveLength(validTables.length);
+    expect(payload).toEqual(
+      expect.arrayContaining([
+        { table: "jobs", columnCount: 2, rowCount: 8 },
+        { table: "candidates", columnCount: 1, rowCount: 60 },
+        { table: "applications", columnCount: 3, rowCount: 90 },
+      ]),
+    );
+  });
+
+  it("counts each table's rows through the validated, quoted identifier from the live catalog listing", async () => {
+    const { execute, calls } = buildExecutor();
+    const client = await connectedClient(execute);
+
+    await client.readResource({ uri: "talentscout://tables" });
+
+    const countCalls = calls.filter((call) => call.statement.startsWith("select count(*)"));
+    expect(countCalls).toHaveLength(validTables.length);
+    for (const table of validTables) {
+      expect(
+        countCalls.some((call) => call.statement === `select count(*) as n from "${table}"`),
+      ).toBe(true);
+    }
+  });
+
+  it("rejects with an error carrying the Postgres message and SQLSTATE, and no stack frame, when execute throws (review AI-43 NIT 4)", async () => {
+    const execute: QueryExecutor = () =>
+      Promise.reject(postgresError("connection terminated unexpectedly", "57P01"));
+    const client = await connectedClient(execute);
+
+    try {
+      await client.readResource({ uri: "talentscout://tables" });
+      expect.unreachable();
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("connection terminated unexpectedly");
+      expect(message).toContain("57P01");
+      expect(message).not.toContain("    at ");
+    }
+  });
+});

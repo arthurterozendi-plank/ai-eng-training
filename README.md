@@ -45,21 +45,22 @@ are both launched through `dotenv -e ../../.env.local --`. One file to edit, no 
 Run these from the repository root. Turbo fans each one out to the workspaces that define it and
 caches the results, so re-running with nothing changed is nearly instant.
 
-| Script             | What it does                                                          |
-| ------------------ | --------------------------------------------------------------------- |
-| `pnpm dev`         | Dev server                                                            |
-| `pnpm build`       | Production build                                                      |
-| `pnpm start`       | Serve the production build                                            |
-| `pnpm typecheck`   | `next typegen` in the app, then `tsc --noEmit` in every workspace     |
-| `pnpm lint`        | ESLint (`lint:fix` to autofix)                                        |
-| `pnpm format`      | Prettier write (`format:check` to verify)                             |
-| `pnpm test`        | Vitest once (`test:watch`, `test:coverage`)                           |
-| `pnpm check`       | typecheck + lint + test, then format:check                            |
-| `pnpm db:generate` | Generate migration SQL from `packages/db/src/schema/` — no connection |
-| `pnpm db:check`    | Validate the migration folder — no connection                         |
-| `pnpm db:export`   | Print the full generated DDL to stdout — no connection                |
-| `pnpm db:migrate`  | Apply migrations (connects — see [Database](#database))               |
-| `pnpm db:seed`     | Insert the demo dataset (connects — see [Database](#database))        |
+| Script             | What it does                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`         | Dev server                                                                                                       |
+| `pnpm build`       | Production build                                                                                                 |
+| `pnpm start`       | Serve the production build                                                                                       |
+| `pnpm typecheck`   | `next typegen` in the app, then `tsc --noEmit` in every workspace                                                |
+| `pnpm lint`        | ESLint (`lint:fix` to autofix)                                                                                   |
+| `pnpm format`      | Prettier write (`format:check` to verify)                                                                        |
+| `pnpm test`        | Vitest once (`test:watch`, `test:coverage`)                                                                      |
+| `pnpm check`       | typecheck + lint + test, then format:check                                                                       |
+| `pnpm db:generate` | Generate migration SQL from `packages/db/src/schema/` — no connection                                            |
+| `pnpm db:check`    | Validate the migration folder — no connection                                                                    |
+| `pnpm db:export`   | Print the full generated DDL to stdout — no connection                                                           |
+| `pnpm db:migrate`  | Apply migrations (connects — see [Database](#database))                                                          |
+| `pnpm db:seed`     | Insert the demo dataset (connects — see [Database](#database))                                                   |
+| `pnpm mcp:verify`  | Prove the `talentscout-db` MCP server's read-only guarantee against a live database (connects — see [MCP](#mcp)) |
 
 To work in one workspace, filter: `pnpm --filter @talentscout/web test`.
 
@@ -81,6 +82,7 @@ repositories](#related-repositories) explains.
 
 ```
 apps/
+  mcp-db/                 @talentscout/mcp-db — stdio MCP server over the database (see MCP)
   web/                    @talentscout/web — the Next.js application
     src/
       app/                App Router routes, layouts, route handlers
@@ -98,6 +100,10 @@ packages/
   eslint-config/          @talentscout/eslint-config — `base` and `next`
   typescript-config/      @talentscout/typescript-config — the tsconfig bases
 ```
+
+`apps/mcp-db` has no build or start script and nothing imports it, but it is deployed — to every
+engineer's Claude Code, through `.mcp.json` — which is what "deployable" means here; the CLI below
+is this layout's other deliberate exception, decided the opposite way.
 
 **Two convention tiers.** The root `CLAUDE.md` holds rules that apply everywhere; the two folder
 `CLAUDE.md` files above hold the module-local detail it leaves out, and load when Claude reads any
@@ -175,9 +181,14 @@ Two connection strings, both validated in `packages/db/src/env.ts`:
 - `DATABASE_URL` — the pooled connection (Supavisor, transaction mode). `packages/db/src/client.ts`
   reads it to build `db`, the runtime client every request-path query goes through. Its pool is
   cached on `globalThis` so Next's hot reload cannot leak a connection per edit.
-- `DIRECT_DATABASE_URL` — the direct connection. **Both `pnpm db:migrate` and `pnpm db:seed`
-  use this one**, never the pooled URL: DDL and the migrator's advisory locks do not survive
-  Supabase's transaction pooler.
+- `DIRECT_DATABASE_URL` — the direct connection. **`pnpm db:migrate`, `pnpm db:seed`, and the
+  `talentscout-db` MCP server (see [MCP](#mcp)) all use this one**, never the pooled URL: DDL, the
+  migrator's advisory locks, and the MCP server's own read-only guarantees are all session-scoped
+  and do not survive Supabase's transaction pooler. The MCP server reads inside a read-only
+  transaction and cannot write, which is what keeps this section's "the seed has no reset path"
+  safety story coherent even though `DIRECT_DATABASE_URL` may point at the hosted project. Read-only
+  prevents damage, not disclosure, though: pointing this key at a database holding real candidates
+  sends their names, emails and phone numbers into whatever agent context reads them.
 
 ```bash
 cp .env.example .env.local   # fill in both URLs — supabase status prints the local defaults
@@ -254,11 +265,30 @@ cached — a cached health check reports stale liveness.
 
 Tests live next to their subject as `*.test.ts(x)` under the workspace's `src/`. Each workspace
 configures its own Vitest: `apps/web` runs jsdom with Testing Library (setup in
-`apps/web/vitest.setup.ts`), and `packages/db` runs the node environment with no DOM at all.
+`apps/web/vitest.setup.ts`); `packages/db` and `apps/mcp-db` both run the node environment with no
+DOM at all — `apps/mcp-db`'s `vitest.config.mts` is copied from `packages/db`'s, the pattern to
+copy for the next workspace with no browser code.
 
 ## MCP
 
-`.mcp.json` registers the [chrome-devtools MCP server](https://github.com/ChromeDevTools/chrome-devtools-mcp),
-giving coding agents a real Chrome for navigation, DOM inspection, console logs,
-network traces, and performance traces. Approve the server when your MCP client
-prompts on first run.
+`.mcp.json` registers two servers.
+
+[chrome-devtools](https://github.com/ChromeDevTools/chrome-devtools-mcp) gives coding agents a
+real Chrome for navigation, DOM inspection, console logs, network traces, and performance traces.
+
+`talentscout-db` (`apps/mcp-db`) gives an agent the live database instead of the schema files it
+would otherwise have to guess from: `query` runs arbitrary SQL, `schema` and `describe-table` read
+the Postgres catalog directly — so triggers, enum types and FK delete actions that no Drizzle file
+describes are visible too — and the `talentscout://tables` resource lists every table with its
+column and row counts. It is **read-only by construction, not by prompt instruction**: the SQL you
+send runs inside `BEGIN READ ONLY` over the extended query protocol, which is what stops a payload
+like `commit; drop table jobs` from smuggling a second statement past the transaction — a bare
+`BEGIN READ ONLY` alone does not catch that. Read-only means no writes, not no side effects — a
+statement can still take a lock, signal another backend, or (on a self-hosted Postgres where
+`DIRECT_DATABASE_URL` names a real superuser, not this project's Supabase role) run a program via
+`COPY … TO PROGRAM`, which `BEGIN READ ONLY` does not refuse because it writes nothing to the
+database — so every call resets session state and releases advisory locks before it runs. `query`
+results are capped at 100 rows by default, with the exact total always stated and a per-call
+`maxRows` override up to 1000.
+
+Approve each server when your MCP client prompts on first run.

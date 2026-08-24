@@ -3,6 +3,11 @@
     "chrome-devtools": {
       "command": "npx",
       "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
+    "talentscout-db": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["--silent", "--filter", "@talentscout/mcp-db", "run", "mcp"]
     }
   }
 }

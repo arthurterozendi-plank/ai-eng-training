@@ -12,8 +12,8 @@ import { notes } from "./notes";
  * docs/specs/ai-34-domain-model.md §3.9 — `jobs ↔ applications`, `candidates ↔ applications`,
  * `applications ↔ interviews / notes / transitions`, and `notes → job | candidate |
  * application`. Declarative only: no runtime cost, no extra tables, no query runs here. They
- * exist so AI-43 and AI-63 can write `db.query.<table>.findMany({ with: … })` instead of
- * hand-rolled joins.
+ * exist so AI-63 can write `db.query.<table>.findMany({ with: … })` instead of hand-rolled
+ * joins.
  *
  * Collected in one module rather than beside each table: a `relations()` call needs the
  * referenced table as a *value* at import time, and the FK graph here is not a DAG —
