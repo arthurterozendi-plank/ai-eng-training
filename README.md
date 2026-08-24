@@ -95,7 +95,7 @@ apps/
       hooks/              Client-side React hooks
       lib/                Framework-free code (cn, formatters, the logger, data loaders)
       types/              Shared, app-wide types
-      env.ts              NODE_ENV and NEXT_PUBLIC_APP_URL, zod-validated
+      env.ts              NODE_ENV, NEXT_PUBLIC_APP_URL, PostHog keys — zod-validated
 packages/
   db/                     @talentscout/db — Drizzle schema, migrations, seed, DB env
   eslint-config/          @talentscout/eslint-config — `base` and `next`
@@ -154,11 +154,11 @@ into.
 Each workspace validates the keys it owns, in its own `src/env.ts` — the only module in that
 workspace allowed to touch `process.env`:
 
-| Workspace          | Owns                                                                 |
-| ------------------ | -------------------------------------------------------------------- |
-| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`                                    |
-| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                |
-| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY` |
+| Workspace          | Owns                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` |
+| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                                    |
+| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY`                     |
 
 Ownership follows the code that reads the value, so a package carries its own contract instead
 of depending on an application to validate it for it. A workspace that needs another's value
@@ -366,6 +366,24 @@ configures its own Vitest: `apps/web` runs jsdom with Testing Library (setup in
 environment with no DOM at all — both MCP servers' `vitest.config.mts` is copied from
 `packages/db`'s, the pattern to copy for the next workspace with no browser code.
 
+## Analytics
+
+PostHog is wired in because Day 5's exercise is instrument-then-verify: add funnel events, then
+have an agent check via PostHog's own MCP server which ones actually fired. Nothing calls
+`posthog.capture` yet — this only lays the pipe both halves need.
+
+`apps/web/src/instrumentation-client.ts` calls `startAnalytics()` (`apps/web/src/lib/analytics.ts`)
+rather than a `"use client"` `PostHogProvider` wrapping the tree. Next's instrumentation-client
+convention runs before hydration, so initialising there keeps analytics out of the React tree
+entirely — no render can fail on it. `analyticsOptions` turns autocapture, session replay and
+external script loading off: the corpus is candidate data, and the exercise wants deliberate,
+named events instead of incidental capture noise. The key (`NEXT_PUBLIC_POSTHOG_KEY`, see
+[Environment variables](#environment-variables)) is optional — analytics being unconfigured must
+never be a broken app.
+
+Creating the PostHog project and proving events reach it is a one-time, human, post-merge step:
+see `docs/specs/ai-27-posthog-event-capture.md` §5.
+
 ## MCP
 
 `.mcp.json` registers three servers.
@@ -403,5 +421,8 @@ needs a personal API key with `query:read`, `event_definition:read` and
 `property_definition:read`, and whatever PostHog holds reaches the agent's context — so
 autocapture, which records form input outside the event catalog, must stay off in the project it
 reads. Rationale and the live-verification checklist: `docs/specs/ai-44-posthog-mcp.md`.
+`POSTHOG_API_HOST` is PostHog's **private** app host, `us.posthog.com` / `eu.posthog.com` — not the
+**ingestion** host `NEXT_PUBLIC_POSTHOG_HOST` holds (`us.i.posthog.com` / `eu.i.posthog.com`). The
+two are easy to confuse, and mixing them up 404s with no obvious cause.
 
 Approve each server when your MCP client prompts on first run.
