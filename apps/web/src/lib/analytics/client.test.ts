@@ -42,7 +42,7 @@ describe("startAnalytics", () => {
             NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
           },
         }),
-      loadClient: () => Promise.resolve({ init }),
+      loadClient: () => Promise.resolve({ init, capture: vi.fn() }),
     };
 
     const status = await startAnalytics(deps);
@@ -54,7 +54,7 @@ describe("startAnalytics", () => {
 
   it("never calls loadClient or init, and resolves missing-key, when the key is absent", async () => {
     const init = vi.fn();
-    const loadClient = vi.fn(() => Promise.resolve({ init }));
+    const loadClient = vi.fn(() => Promise.resolve({ init, capture: vi.fn() }));
     const deps: AnalyticsDeps = {
       loadEnv: () =>
         Promise.resolve({
@@ -80,7 +80,7 @@ describe("startAnalytics", () => {
   it("resolves init-failed, never rejects, when loadEnv() rejects", async () => {
     const deps: AnalyticsDeps = {
       loadEnv: () => Promise.reject(new Error("env module failed to load")),
-      loadClient: () => Promise.resolve({ init: vi.fn() }),
+      loadClient: () => Promise.resolve({ init: vi.fn(), capture: vi.fn() }),
     };
 
     await expect(startAnalytics(deps)).resolves.toEqual({ enabled: false, reason: "init-failed" });
@@ -119,6 +119,7 @@ describe("startAnalytics", () => {
           init: () => {
             throw new Error("init blew up");
           },
+          capture: vi.fn(),
         }),
     };
 
@@ -134,7 +135,7 @@ describe("startAnalytics", () => {
             NEXT_PUBLIC_POSTHOG_HOST: "https://us.i.posthog.com",
           },
         }),
-      loadClient: () => Promise.resolve({ init: vi.fn() }),
+      loadClient: () => Promise.resolve({ init: vi.fn(), capture: vi.fn() }),
     };
 
     await startAnalytics(deps);
@@ -146,7 +147,7 @@ describe("startAnalytics", () => {
   it("warns exactly once, ungated, on the init-failed path", async () => {
     const deps: AnalyticsDeps = {
       loadEnv: () => Promise.reject(new Error("boom")),
-      loadClient: () => Promise.resolve({ init: vi.fn() }),
+      loadClient: () => Promise.resolve({ init: vi.fn(), capture: vi.fn() }),
     };
 
     await startAnalytics(deps);
