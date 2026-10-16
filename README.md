@@ -230,6 +230,21 @@ which re-runs every migration against a freshly emptied database. Hosted is seed
 
 ## Analytics
 
+PostHog is wired in because Day 5's exercise is instrument-then-verify: add funnel events, then have
+an agent check via the `talentscout-posthog` MCP server which ones actually fired.
+
+`apps/web/src/instrumentation-client.ts` calls `startAnalytics()`
+(`apps/web/src/lib/analytics/client.ts`) rather than a `"use client"` `PostHogProvider` wrapping the
+tree. Next's instrumentation-client convention runs before hydration, so initialising there keeps
+analytics out of the React tree entirely — no render can fail on it. `analyticsOptions` turns
+autocapture, session replay and external script loading off: the corpus is candidate data, and the
+exercise wants deliberate, named events instead of incidental capture noise. The key
+(`NEXT_PUBLIC_POSTHOG_KEY`, see [Environment variables](#environment-variables)) is optional —
+analytics being unconfigured must never be a broken app.
+
+Creating the PostHog project and proving events reach it is a one-time, human, post-merge step:
+see `docs/specs/ai-27-posthog-event-capture.md` §5.
+
 The hiring funnel is six named events — `job_viewed`, `application_started`, `resume_uploaded`,
 `application_submitted`, `application_stage_changed`, `offer_made` — validated by
 `apps/web/src/lib/analytics/` (`properties.ts`, `events.ts`, `capture.ts`). The full contract,
@@ -251,9 +266,9 @@ id are pseudonymous keys that only this database can join back to a person.
 **`captureAnalyticsEvent(event, sink)` takes its sink as an explicit argument**, which is the
 entire seam between this catalog and wherever an event actually goes. This repository ships the
 validated catalog and the one choke point every event passes through before it leaves the
-process; it adds no PostHog dependency, no env key and no client init. Wiring a live sink — a
-PostHog browser client, its env key, and the surfaces that would actually call
-`captureAnalyticsEvent` — is separate, not-yet-started work.
+process; the catalog itself depends on nothing PostHog-specific. A sink that hands events to the
+client above, and the surfaces that would actually call `captureAnalyticsEvent`, are separate,
+not-yet-started work — so nothing calls `posthog.capture` yet.
 
 **Renaming an event is not retroactive.** Once a name has been captured, historical rows keep the
 old name forever — a rename does not rewrite them, it splits one funnel into two spellings. Get
@@ -365,24 +380,6 @@ configures its own Vitest: `apps/web` runs jsdom with Testing Library (setup in
 `apps/web/vitest.setup.ts`); `packages/db`, `apps/mcp-db` and `apps/mcp-posthog` run the node
 environment with no DOM at all — both MCP servers' `vitest.config.mts` is copied from
 `packages/db`'s, the pattern to copy for the next workspace with no browser code.
-
-## Analytics
-
-PostHog is wired in because Day 5's exercise is instrument-then-verify: add funnel events, then have
-an agent check via the `talentscout-posthog` MCP server which ones actually fired. Nothing calls
-`posthog.capture` yet — this only lays the pipe both halves need.
-
-`apps/web/src/instrumentation-client.ts` calls `startAnalytics()`
-(`apps/web/src/lib/analytics/client.ts`) rather than a `"use client"` `PostHogProvider` wrapping the
-tree. Next's instrumentation-client convention runs before hydration, so initialising there keeps
-analytics out of the React tree entirely — no render can fail on it. `analyticsOptions` turns
-autocapture, session replay and external script loading off: the corpus is candidate data, and the
-exercise wants deliberate, named events instead of incidental capture noise. The key
-(`NEXT_PUBLIC_POSTHOG_KEY`, see [Environment variables](#environment-variables)) is optional —
-analytics being unconfigured must never be a broken app.
-
-Creating the PostHog project and proving events reach it is a one-time, human, post-merge step:
-see `docs/specs/ai-27-posthog-event-capture.md` §5.
 
 ## MCP
 
