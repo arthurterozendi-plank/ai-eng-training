@@ -8,6 +8,11 @@
       "type": "stdio",
       "command": "pnpm",
       "args": ["--silent", "--filter", "@talentscout/mcp-db", "run", "mcp"]
+    },
+    "talentscout-posthog": {
+      "type": "stdio",
+      "command": "pnpm",
+      "args": ["--silent", "--filter", "@talentscout/mcp-posthog", "run", "mcp"]
     }
   }
 }
