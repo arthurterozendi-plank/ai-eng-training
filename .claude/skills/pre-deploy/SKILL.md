@@ -53,11 +53,18 @@ The script prints `file:line` for every hit. Report them all.
 bash .claude/skills/pre-deploy/scripts/check-env.sh
 ```
 
-Every key declared in `.env.example` must resolve to a non-empty value, looked up in the process
-environment, then `.env.production.local`, `.env.local`, `.env` — Next.js precedence order. The
-script parses those files rather than sourcing them, so a malformed env file cannot execute.
+Every deploy key declared in `.env.example` must resolve to a non-empty value, looked up in the
+process environment, then `.env.production.local`, `.env.local`, `.env` — Next.js precedence
+order. The script parses those files rather than sourcing them, so a malformed env file cannot
+execute.
 
-It also emits a `WARN` for any key an `env.ts` validates that `.env.example` never declares —
+A line reading exactly `# @local-only` ends the deploy keys: every key below it, to the end of
+the file, is read only by a local developer tool (an MCP server's credentials, say). Those keys
+are listed on a `NOTE` line and never fail the check — a deploy environment must not need a
+developer's personal API key to pass. A `NOTE` is not a finding; leave it out of the report.
+
+It also emits a `WARN` for any key an `env.ts` validates that `.env.example` never declares, in
+either section —
 `apps/web/src/env.ts` owns `NEXT_PUBLIC_APP_URL` and `NODE_ENV`, `packages/db/src/env.ts` owns the
 two Postgres connection strings.
 A warning does not fail the gate, but it is real drift: whoever deploys will not know to set it.
