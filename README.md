@@ -165,6 +165,15 @@ Add the variable to the owning workspace's schema, then to the root `.env.exampl
 browser reads must be prefixed `NEXT_PUBLIC_`. Import `env` instead of touching `process.env`
 directly — invalid config then fails loudly at startup rather than silently at runtime.
 
+**Developer-tool keys are local-only.** `.env.example` has two sections, split by a line reading
+exactly `# @local-only`. Keys above it are the deploy contract: `/pre-deploy` fails when any of
+them has no value. Keys below it are read only by tools that run on an engineer's machine — an
+MCP server's credentials — and never by anything deployed, so the gate does not require them. The
+reason is what such a key usually is: a developer's personal API key. Requiring it to deploy would
+force a deploy environment to hold one person's credentials just to pass a check, which is worse
+than the drift it guards against. Local-only keys are still declared, so the drift check still
+reports a schema key that appears in neither section.
+
 ## Database
 
 Everything database-related lives in `packages/db`: schema under `packages/db/src/schema/`

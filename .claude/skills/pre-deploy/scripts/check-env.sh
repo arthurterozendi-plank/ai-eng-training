@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 #
-# Every key declared in .env.example must resolve to a non-empty value.
+# Every deploy key declared in .env.example must resolve to a non-empty value.
 #
-# .env.example is the committed deploy-time contract; each workspace's src/env.ts is a runtime
+# .env.example is the committed env contract; each workspace's src/env.ts is a runtime
 # validator. A key present in one and missing from the other is a deploy waiting to fail, so
 # this also reports keys any env.ts validates but .env.example never declares.
+#
+# A line reading exactly `# @local-only` splits .env.example in two. Keys above it are the deploy
+# contract and must have values. Keys below it, to the end of the file, are read only by local
+# developer tools — an MCP server's credentials — so they are still declared, and the drift
+# check still counts them, but an empty one never fails the gate: a deploy environment must not
+# need a developer's personal API key to pass.
 #
 # Both files live at the repository root: one .env.example and one .env.local serve every
 # workspace, because Next.js only reads .env files from its own project directory and the
@@ -39,15 +45,29 @@ env_file_has_value() {
   [ -n "$value" ]
 }
 
-declared=$(sed -nE 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p' .env.example)
+# The key names declared on stdin, one per line.
+keys_in() {
+  sed -nE 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=.*/\1/p'
+}
+
+marker=$(grep -nE '^[[:space:]]*#[[:space:]]*@local-only[[:space:]]*$' .env.example | head -n 1 | cut -d: -f1)
+
+if [ -n "$marker" ]; then
+  deploy=$(sed -n "1,$((marker - 1))p" .env.example | keys_in)
+  local_only=$(sed -n "$((marker + 1)),\$p" .env.example | keys_in)
+else
+  deploy=$(keys_in < .env.example)
+  local_only=""
+fi
+declared=$(printf '%s\n%s\n' "$deploy" "$local_only")
 
 status=0
 
-if [ -z "$declared" ]; then
-  echo "PASS: .env.example declares no keys"
+if [ -z "$deploy" ]; then
+  echo "PASS: .env.example declares no deploy keys"
 else
   missing=""
-  for key in $declared; do
+  for key in $deploy; do
     [ -n "${!key:-}" ] && continue
     env_file_has_value .env.production.local "$key" && continue
     env_file_has_value .env.local "$key" && continue
@@ -56,7 +76,7 @@ else
   done
 
   if [ -z "$missing" ]; then
-    echo "PASS: every .env.example key resolves to a value"
+    echo "PASS: every deploy key in .env.example resolves to a value"
   else
     echo "FAIL: unset or empty:$missing"
     echo "      declared in .env.example but not found in the environment, .env.production.local, .env.local, or .env"
@@ -64,7 +84,12 @@ else
   fi
 fi
 
-# Drift check: keys any workspace's env.ts validates that .env.example never mentions.
+if [ -n "$local_only" ]; then
+  echo "NOTE: local-only, not required to deploy:" $local_only
+fi
+
+# Drift check: keys any workspace's env.ts validates that .env.example never mentions, in either
+# section.
 env_modules=()
 for module in apps/*/src/env.ts packages/*/src/env.ts; do
   [ -f "$module" ] && env_modules+=("$module")

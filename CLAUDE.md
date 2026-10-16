@@ -192,7 +192,9 @@ inside that caller.
   from its own project directory and never from a parent, so every script that needs them is
   launched through `dotenv -e ../../.env.local --`.
 - Every key added to a schema must also be added to the root `.env.example`, which is the
-  deploy-time contract `/pre-deploy` checks against.
+  contract `/pre-deploy` checks against. A key that only a local developer tool reads — an MCP
+  server's credentials — goes below the line reading exactly `# @local-only`: still declared, so
+  drift detection covers it, but a deploy never requires a value for it.
 
 ## Verification
 
