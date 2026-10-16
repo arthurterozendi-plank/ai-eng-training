@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DATABASE_TIMEOUT_MS } from "@/lib/database-timeout";
 import { GET } from "@/app/api/candidates/[id]/route";
 import type { CandidateResponse, ErrorResponse } from "@/app/api/candidates/[id]/schema";
 
@@ -79,6 +80,12 @@ beforeEach(() => {
   findFirst.mockReset();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 describe("GET /api/candidates/[id]", () => {
   it("returns the candidate mapped to the wire shape with no-store caching", async () => {
     findFirst.mockResolvedValue(buildCandidateRow());
@@ -130,6 +137,7 @@ describe("GET /api/candidates/[id]", () => {
 
     expect(body.error).toBe("Invalid candidate id");
     expect(findFirst).not.toHaveBeenCalled();
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("returns 404 for a well-formed id with no matching row", async () => {
@@ -142,21 +150,60 @@ describe("GET /api/candidates/[id]", () => {
     const body = (await response.json()) as ErrorResponse;
 
     expect(body).toEqual({ error: "Candidate not found" });
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  it("returns a generic 500 and logs the detail without leaking it to the client", async () => {
+  it("returns a generic, uncached 500 whose correlation id matches the logged detail", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     findFirst.mockRejectedValue(new Error("connection terminated unexpectedly"));
 
     const response = await candidateRequest(CANDIDATE_ID);
 
     expect(response.status).toBe(500);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
 
     const rawBody = await response.text();
+    const body = JSON.parse(rawBody) as ErrorResponse;
 
     expect(rawBody).not.toContain("connection terminated unexpectedly");
-    expect(JSON.parse(rawBody)).toEqual({ error: "Internal server error" });
-    expect(consoleError).toHaveBeenCalled();
+    expect(body).toEqual({ error: "Internal server error", correlationId: expect.any(String) });
+    expect(body.correlationId).toMatch(UUID);
+
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    const logged = JSON.parse(consoleError.mock.calls[0][0] as string);
+
+    expect(logged).toMatchObject({
+      message: "GET /api/candidates/[id] failed",
+      correlationId: body.correlationId,
+      candidateId: CANDIDATE_ID,
+      error: { message: "connection terminated unexpectedly" },
+    });
+
+    consoleError.mockRestore();
+  });
+
+  it("answers a slow database with a timeout instead of hanging", async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    findFirst.mockReturnValue(new Promise(() => {}));
+
+    const pending = candidateRequest(CANDIDATE_ID);
+    await vi.advanceTimersByTimeAsync(DATABASE_TIMEOUT_MS);
+    const response = await pending;
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+
+    const body = (await response.json()) as ErrorResponse;
+
+    expect(body).toEqual({
+      error: "Timed out loading candidate",
+      correlationId: expect.any(String),
+    });
+    expect(JSON.parse(consoleError.mock.calls[0][0] as string)).toMatchObject({
+      correlationId: body.correlationId,
+      error: { name: "DatabaseTimeoutError" },
+    });
 
     consoleError.mockRestore();
   });
