@@ -12,11 +12,13 @@ export interface AnalyticsEnv {
 }
 
 /**
- * The one PostHog method {@link startAnalytics} calls, kept to its own interface rather than
- * `posthog-js`'s `PostHog` class so tests can stub it without constructing a real client.
+ * The two PostHog methods TalentScout calls — `init` from {@link startAnalytics}, `capture` from
+ * the browser sink — kept to their own interface rather than `posthog-js`'s `PostHog` class so
+ * tests can stub them without constructing a real client.
  */
 export interface AnalyticsClient {
   init(token: string, config?: Partial<PostHogConfig>): unknown;
+  capture(event: string, properties?: Record<string, unknown>): unknown;
 }
 
 /**
@@ -83,6 +85,8 @@ export function analyticsOptions(host: string): Partial<PostHogConfig> {
   };
 }
 
+let started: Promise<AnalyticsClient | undefined> = Promise.resolve(undefined);
+
 /**
  * Initializes PostHog when a key is configured, and never throws or rejects. Called once from
  * `src/instrumentation-client.ts`, which Next.js runs before hydration with no `try`/`catch` of
@@ -94,21 +98,40 @@ export function analyticsOptions(host: string): Partial<PostHogConfig> {
  * project exists, and answering `"missing-key"` needs nothing from the SDK — so the ~83 KB
  * gzipped client chunk is only fetched once analytics is actually configured.
  */
-export async function startAnalytics(deps: AnalyticsDeps = defaultDeps): Promise<AnalyticsStatus> {
+export function startAnalytics(deps: AnalyticsDeps = defaultDeps): Promise<AnalyticsStatus> {
+  const run = initialise(deps);
+  started = run.then((result) => result.client);
+  return run.then((result) => result.status);
+}
+
+/**
+ * Resolves to the client {@link startAnalytics} initialised, once it has settled, or to
+ * `undefined` when analytics is off — no key, a failed init, or `startAnalytics` never called.
+ * Waiting matters: `posthog-js` drops a `capture` made before `init` rather than queueing it, and
+ * `startAnalytics` is asynchronous, so an event fired on a page's first render would otherwise
+ * race it and be lost.
+ */
+export function analyticsClient(): Promise<AnalyticsClient | undefined> {
+  return started;
+}
+
+async function initialise(
+  deps: AnalyticsDeps,
+): Promise<{ status: AnalyticsStatus; client?: AnalyticsClient }> {
   try {
     const { env } = await deps.loadEnv();
 
     if (!env.NEXT_PUBLIC_POSTHOG_KEY) {
       console.warn("[analytics] disabled: missing-key");
-      return { enabled: false, reason: "missing-key" };
+      return { status: { enabled: false, reason: "missing-key" } };
     }
 
     const client = await deps.loadClient();
     client.init(env.NEXT_PUBLIC_POSTHOG_KEY, analyticsOptions(env.NEXT_PUBLIC_POSTHOG_HOST));
 
-    return { enabled: true };
+    return { status: { enabled: true }, client };
   } catch (error) {
     console.warn("[analytics] disabled: init-failed", error);
-    return { enabled: false, reason: "init-failed" };
+    return { status: { enabled: false, reason: "init-failed" } };
   }
 }

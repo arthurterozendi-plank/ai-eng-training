@@ -27,6 +27,12 @@ export class EnvValidationError extends Error {
 // rather than through a shared constant — otherwise it silently drops out of that check.
 const serverSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  // The project key server-side capture sends with. Optional for the same reason as
+  // NEXT_PUBLIC_POSTHOG_KEY: unset means server analytics is off, not broken.
+  POSTHOG_PROJECT_KEY: z.string().trim().min(1).optional(),
+  // An ingestion host, like NEXT_PUBLIC_POSTHOG_HOST — never POSTHOG_API_HOST, the private
+  // REST API host the PostHog MCP server reads from.
+  POSTHOG_INGEST_HOST: z.url().default("https://us.i.posthog.com"),
 });
 
 const clientSchema = z.object({
@@ -69,6 +75,23 @@ const client = parse(clientSchema, clientRuntime, "client");
 // reconstructs a schema every call, which costs ~50x the validation it precedes, and
 // `NODE_ENV` is read per request by `src/app/api/status/route.ts`.
 const nodeEnvSchema = serverSchema.pick({ NODE_ENV: true });
+const posthogServerSchema = serverSchema.pick({
+  POSTHOG_PROJECT_KEY: true,
+  POSTHOG_INGEST_HOST: true,
+});
+
+// Same `|| undefined` normalization as `clientRuntime`, read at access time like every
+// server value.
+function posthogServerEnv() {
+  return parse(
+    posthogServerSchema,
+    {
+      POSTHOG_PROJECT_KEY: process.env.POSTHOG_PROJECT_KEY || undefined,
+      POSTHOG_INGEST_HOST: process.env.POSTHOG_INGEST_HOST || undefined,
+    },
+    "server",
+  );
+}
 
 // On the client, `process.env` only contains the inlined NEXT_PUBLIC_ values, so the server
 // schema is parsed lazily.
@@ -76,5 +99,11 @@ export const env = {
   ...client,
   get NODE_ENV() {
     return parse(nodeEnvSchema, process.env, "server").NODE_ENV;
+  },
+  get POSTHOG_PROJECT_KEY() {
+    return posthogServerEnv().POSTHOG_PROJECT_KEY;
+  },
+  get POSTHOG_INGEST_HOST() {
+    return posthogServerEnv().POSTHOG_INGEST_HOST;
   },
 };
