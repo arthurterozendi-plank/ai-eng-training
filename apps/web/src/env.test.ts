@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { env } from "@/env";
+import { env, EnvValidationError } from "@/env";
 
 describe("env", () => {
   it("reads NODE_ENV with the database connection strings unset", () => {
@@ -57,6 +57,42 @@ describe("env (module re-evaluated with stubbed variables)", () => {
     // evaluation would have produced — an `instanceof` check would need that same reference, which
     // this test never imports. Matching by `.name` is what works across the reset instead.
     await expect(import("@/env")).rejects.toMatchObject({ name: "EnvValidationError" });
+  });
+});
+
+describe("env server PostHog keys (read at access time)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("leaves POSTHOG_PROJECT_KEY unset and defaults POSTHOG_INGEST_HOST when neither is set", () => {
+    vi.stubEnv("POSTHOG_PROJECT_KEY", undefined);
+    vi.stubEnv("POSTHOG_INGEST_HOST", undefined);
+
+    expect(env.POSTHOG_PROJECT_KEY).toBeUndefined();
+    expect(env.POSTHOG_INGEST_HOST).toBe("https://us.i.posthog.com");
+  });
+
+  it("normalizes an empty POSTHOG_PROJECT_KEY and POSTHOG_INGEST_HOST to absent, rather than throwing", () => {
+    vi.stubEnv("POSTHOG_PROJECT_KEY", "");
+    vi.stubEnv("POSTHOG_INGEST_HOST", "");
+
+    expect(env.POSTHOG_PROJECT_KEY).toBeUndefined();
+    expect(env.POSTHOG_INGEST_HOST).toBe("https://us.i.posthog.com");
+  });
+
+  it("trims POSTHOG_PROJECT_KEY and reads a set POSTHOG_INGEST_HOST", () => {
+    vi.stubEnv("POSTHOG_PROJECT_KEY", "  phc_server  ");
+    vi.stubEnv("POSTHOG_INGEST_HOST", "https://eu.i.posthog.com");
+
+    expect(env.POSTHOG_PROJECT_KEY).toBe("phc_server");
+    expect(env.POSTHOG_INGEST_HOST).toBe("https://eu.i.posthog.com");
+  });
+
+  it("throws EnvValidationError on access when POSTHOG_INGEST_HOST has no scheme", () => {
+    vi.stubEnv("POSTHOG_INGEST_HOST", "eu.i.posthog.com");
+
+    expect(() => env.POSTHOG_INGEST_HOST).toThrow(EnvValidationError);
   });
 });
 
