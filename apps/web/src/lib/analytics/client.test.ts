@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { analyticsOptions, startAnalytics, type AnalyticsDeps } from "@/lib/analytics";
+import { analyticsOptions, startAnalytics, type AnalyticsDeps } from "@/lib/analytics/client";
 
 describe("analyticsOptions", () => {
   it("returns exactly the seven documented posthog.init options", () => {
@@ -156,10 +156,10 @@ describe("startAnalytics", () => {
   });
 });
 
-describe("static import guard (analytics.ts)", () => {
+describe("static import guard (client.ts)", () => {
   /**
    * AC 4's mechanical guard: neither `posthog-js` nor `@/env` may be a value-level static
-   * import in analytics.ts. Both are reached only through a dynamic `import()` inside
+   * import in client.ts. Both are reached only through a dynamic `import()` inside
    * `startAnalytics`'s own `try` — Next.js requires `src/instrumentation-client.ts` at module
    * scope with no `try` of its own before hydration, so a static import that throws here is
    * uncatchable and costs the whole app its hydration (spec §2, §3.3). This is the check DoD 6
@@ -170,7 +170,7 @@ describe("static import guard (analytics.ts)", () => {
    * side-effect `import "posthog-js";` — value-level, uncatchable at runtime, exactly the
    * failure mode this guard exists to prevent — slips straight through it.
    */
-  const source = fs.readFileSync(path.join(import.meta.dirname, "analytics.ts"), "utf-8");
+  const source = fs.readFileSync(path.join(import.meta.dirname, "client.ts"), "utf-8");
 
   it("has exactly one static import: posthog-js's types", () => {
     const importLines = source

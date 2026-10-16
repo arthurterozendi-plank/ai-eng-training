@@ -1,4 +1,4 @@
-import { startAnalytics } from "@/lib/analytics";
+import { startAnalytics } from "@/lib/analytics/client";
 
 // Next requires this module at the root (or `src/`) of the app and evaluates it at module
 // scope, before hydration, with no `try`/`catch` of its own (spec §2, §3.3) — so it may not

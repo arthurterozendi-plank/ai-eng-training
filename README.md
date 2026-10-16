@@ -368,18 +368,18 @@ environment with no DOM at all — both MCP servers' `vitest.config.mts` is copi
 
 ## Analytics
 
-PostHog is wired in because Day 5's exercise is instrument-then-verify: add funnel events, then
-have an agent check via PostHog's own MCP server which ones actually fired. Nothing calls
+PostHog is wired in because Day 5's exercise is instrument-then-verify: add funnel events, then have
+an agent check via the `talentscout-posthog` MCP server which ones actually fired. Nothing calls
 `posthog.capture` yet — this only lays the pipe both halves need.
 
-`apps/web/src/instrumentation-client.ts` calls `startAnalytics()` (`apps/web/src/lib/analytics.ts`)
-rather than a `"use client"` `PostHogProvider` wrapping the tree. Next's instrumentation-client
-convention runs before hydration, so initialising there keeps analytics out of the React tree
-entirely — no render can fail on it. `analyticsOptions` turns autocapture, session replay and
-external script loading off: the corpus is candidate data, and the exercise wants deliberate,
-named events instead of incidental capture noise. The key (`NEXT_PUBLIC_POSTHOG_KEY`, see
-[Environment variables](#environment-variables)) is optional — analytics being unconfigured must
-never be a broken app.
+`apps/web/src/instrumentation-client.ts` calls `startAnalytics()`
+(`apps/web/src/lib/analytics/client.ts`) rather than a `"use client"` `PostHogProvider` wrapping the
+tree. Next's instrumentation-client convention runs before hydration, so initialising there keeps
+analytics out of the React tree entirely — no render can fail on it. `analyticsOptions` turns
+autocapture, session replay and external script loading off: the corpus is candidate data, and the
+exercise wants deliberate, named events instead of incidental capture noise. The key
+(`NEXT_PUBLIC_POSTHOG_KEY`, see [Environment variables](#environment-variables)) is optional —
+analytics being unconfigured must never be a broken app.
 
 Creating the PostHog project and proving events reach it is a one-time, human, post-merge step:
 see `docs/specs/ai-27-posthog-event-capture.md` §5.

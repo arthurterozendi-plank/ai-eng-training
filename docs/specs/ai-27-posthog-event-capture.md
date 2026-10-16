@@ -25,7 +25,7 @@ This ticket lays the pipe. It does not put anything through it.
 
 - `posthog-js` as a dependency of `apps/web`, and the `pnpm-workspace.yaml` change its transitive
   `core-js` forces.
-- `apps/web/src/lib/analytics.ts` — the analytics module and its test.
+- `apps/web/src/lib/analytics/client.ts` — the analytics module and its test.
 - `apps/web/src/instrumentation-client.ts` — the Next 16 client-instrumentation entry point.
 - `NEXT_PUBLIC_POSTHOG_KEY` and `NEXT_PUBLIC_POSTHOG_HOST` in `apps/web/src/env.ts` and the root
   `.env.example`.
@@ -282,7 +282,7 @@ installed in this worktree, so every SDK fact below is reproducible from the tre
 - `check-console.sh` fails on `console.log`/`console.debug` under `apps/*/src`. **`console.warn` and
   `console.error` are deliberately allowed.**
 - `apps/web/vitest.config.mts` collects `src/**/*.{test,spec}.{ts,tsx}` in jsdom, so
-  `src/instrumentation-client.test.ts` and `src/lib/analytics.test.ts` are both picked up.
+  `src/instrumentation-client.test.ts` and `src/lib/analytics/client.test.ts` are both picked up.
   `apps/web/tsconfig.json` includes `**/*.ts`, so `src/instrumentation-client.ts` is typechecked.
 - `apps/web/package.json` pins `next` and `react` exactly and carets everything else.
 - `.gitignore` ignores `.env*` and un-ignores `!.env.example`.
@@ -467,8 +467,8 @@ pre-existing failures in exactly those three files, and every AI-27 test must pa
 
 ### Slice 2 — `posthog-js` and the analytics module
 
-`pnpm-workspace.yaml`, `apps/web/package.json`, `pnpm-lock.yaml`, `apps/web/src/lib/analytics.ts`,
-`apps/web/src/lib/analytics.test.ts`.
+`pnpm-workspace.yaml`, `apps/web/package.json`, `pnpm-lock.yaml`, `apps/web/src/lib/analytics/client.ts`,
+`apps/web/src/lib/analytics/client.test.ts`.
 
 Add with `pnpm add posthog-js --filter @talentscout/web` and **record whatever version pnpm
 resolves** — do not hand-pin. `pnpm add` will write a `core-js: set this to true or false` placeholder
@@ -498,7 +498,7 @@ into `allowBuilds`; change it to `false`.
    none is dead.
    **The implementer must delete the `try`/`catch`, confirm all three fail, paste the failure output
    into the PR, then restore it.**
-7. **A source scan of `src/lib/analytics.ts` asserts every `posthog-js` and `@/env` import in it is
+7. **A source scan of `src/lib/analytics/client.ts` asserts every `posthog-js` and `@/env` import in it is
    `import type`** — no value-level static import of either. _Fails_ exactly on the conversion that
    DoD 6 cannot see, because DoD 6 injects `deps` and never exercises the real import style.
 8. Both the `missing-key` and `init-failed` paths emit exactly one `console.warn` carrying the reason,
@@ -510,10 +510,10 @@ into `allowBuilds`; change it to `false`.
 
 **Definition of done**
 
-1. `instrumentation-client.test.ts` mocks `@/lib/analytics`, imports the module, and asserts
+1. `instrumentation-client.test.ts` mocks `@/lib/analytics/client`, imports the module, and asserts
    `startAnalytics` was called exactly once. _Fails if_ the wiring is deleted.
 2. A source scan asserts `src/instrumentation-client.ts` contains no value-level import of
-   `posthog-js` or `@/env` — it may only import `@/lib/analytics`. Same reasoning as slice 2 DoD 7: a
+   `posthog-js` or `@/env` — it may only import `@/lib/analytics/client`. Same reasoning as slice 2 DoD 7: a
    static import here is uncatchable and costs the app its hydration.
 3. **Build-artifact proof that Next loaded the file.** With `NEXT_PUBLIC_POSTHOG_KEY` unset, run
    `pnpm --filter @talentscout/web build`; once it prints `✓ Compiled successfully`,
@@ -697,7 +697,9 @@ human round trip. Rows amended in review say which round.
 2. **A sibling worktree is already on `feat/ai-45-funnel-analytics` at the same base commit.** AI-45 is
    _blocked by_ this ticket and is in flight anyway. It shares `pnpm-lock.yaml` and will want
    `src/lib/analytics.ts`. Expect a lockfile conflict and a duplicated analytics module unless AI-27
-   lands first and AI-45 rebases. A scheduling call for the human.
+   lands first and AI-45 rebases. A scheduling call for the human. **Resolved:** AI-45 merged first with its
+   catalog in `src/lib/analytics/`, and this module moved into that directory as `client.ts` when
+   AI-27 rebased onto it.
 3. **`pnpm install` exits `1` until the `core-js` placeholder becomes `false`.** Measured. A fresh
    checkout and CI both break.
 4. **`check-env.sh` is already failing on the base and stays failing.** There is no `.env.local` in
