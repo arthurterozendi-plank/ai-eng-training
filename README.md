@@ -228,6 +228,37 @@ Supabase project, and a table-emptying code path is a standing risk to real data
 does not need: to re-seed locally, use the Supabase CLI's own local re-initialisation workflow,
 which re-runs every migration against a freshly emptied database. Hosted is seeded once.
 
+## Analytics
+
+The hiring funnel is six named events — `job_viewed`, `application_started`, `resume_uploaded`,
+`application_submitted`, `application_stage_changed`, `offer_made` — validated by
+`apps/web/src/lib/analytics/` (`properties.ts`, `events.ts`, `capture.ts`). The full contract,
+including the per-event property table, lives in
+[`docs/specs/ai-45-funnel-analytics.md`](docs/specs/ai-45-funnel-analytics.md); this section
+records only the decisions.
+
+**Every name is `object_action`: lowercase snake_case, at least two segments, past tense, no
+namespace prefix.** Formally, the final segment must end in `ed` or appear in an explicit
+irregular allow-list — today just `made`, for `offer_made` — so a new event can't be added
+without the review that extending that list forces.
+
+**Every property is a uuid or a member of a closed enum — never free text, and that is structural,
+not filtered.** No event property has a type that could hold a candidate's name, email address or
+résumé text, so none of the three is stripped out of an event; each is unrepresentable by
+construction. `candidate_id` is deliberately never sent either: an event's job id and application
+id are pseudonymous keys that only this database can join back to a person.
+
+**`captureAnalyticsEvent(event, sink)` takes its sink as an explicit argument**, which is the
+entire seam between this catalog and wherever an event actually goes. This repository ships the
+validated catalog and the one choke point every event passes through before it leaves the
+process; it adds no PostHog dependency, no env key and no client init. Wiring a live sink — a
+PostHog browser client, its env key, and the surfaces that would actually call
+`captureAnalyticsEvent` — is separate, not-yet-started work.
+
+**Renaming an event is not retroactive.** Once a name has been captured, historical rows keep the
+old name forever — a rename does not rewrite them, it splits one funnel into two spellings. Get
+the name right before the first real event ships.
+
 ## Adding shadcn/ui components
 
 ```bash
