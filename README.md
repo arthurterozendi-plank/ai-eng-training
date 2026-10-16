@@ -95,7 +95,7 @@ apps/
       hooks/              Client-side React hooks
       lib/                Framework-free code (cn, formatters, the logger, data loaders)
       types/              Shared, app-wide types
-      env.ts              NODE_ENV and NEXT_PUBLIC_APP_URL, zod-validated
+      env.ts              NODE_ENV, NEXT_PUBLIC_APP_URL, PostHog keys — zod-validated
 packages/
   db/                     @talentscout/db — Drizzle schema, migrations, seed, DB env
   eslint-config/          @talentscout/eslint-config — `base` and `next`
@@ -154,11 +154,11 @@ into.
 Each workspace validates the keys it owns, in its own `src/env.ts` — the only module in that
 workspace allowed to touch `process.env`:
 
-| Workspace          | Owns                                                                 |
-| ------------------ | -------------------------------------------------------------------- |
-| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`                                    |
-| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                |
-| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY` |
+| Workspace          | Owns                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` |
+| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                                    |
+| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY`                     |
 
 Ownership follows the code that reads the value, so a package carries its own contract instead
 of depending on an application to validate it for it. A workspace that needs another's value
@@ -230,6 +230,21 @@ which re-runs every migration against a freshly emptied database. Hosted is seed
 
 ## Analytics
 
+PostHog is wired in because Day 5's exercise is instrument-then-verify: add funnel events, then have
+an agent check via the `talentscout-posthog` MCP server which ones actually fired.
+
+`apps/web/src/instrumentation-client.ts` calls `startAnalytics()`
+(`apps/web/src/lib/analytics/client.ts`) rather than a `"use client"` `PostHogProvider` wrapping the
+tree. Next's instrumentation-client convention runs before hydration, so initialising there keeps
+analytics out of the React tree entirely — no render can fail on it. `analyticsOptions` turns
+autocapture, session replay and external script loading off: the corpus is candidate data, and the
+exercise wants deliberate, named events instead of incidental capture noise. The key
+(`NEXT_PUBLIC_POSTHOG_KEY`, see [Environment variables](#environment-variables)) is optional —
+analytics being unconfigured must never be a broken app.
+
+Creating the PostHog project and proving events reach it is a one-time, human, post-merge step:
+see `docs/specs/ai-27-posthog-event-capture.md` §5.
+
 The hiring funnel is six named events — `job_viewed`, `application_started`, `resume_uploaded`,
 `application_submitted`, `application_stage_changed`, `offer_made` — validated by
 `apps/web/src/lib/analytics/` (`properties.ts`, `events.ts`, `capture.ts`). The full contract,
@@ -251,9 +266,9 @@ id are pseudonymous keys that only this database can join back to a person.
 **`captureAnalyticsEvent(event, sink)` takes its sink as an explicit argument**, which is the
 entire seam between this catalog and wherever an event actually goes. This repository ships the
 validated catalog and the one choke point every event passes through before it leaves the
-process; it adds no PostHog dependency, no env key and no client init. Wiring a live sink — a
-PostHog browser client, its env key, and the surfaces that would actually call
-`captureAnalyticsEvent` — is separate, not-yet-started work.
+process; the catalog itself depends on nothing PostHog-specific. A sink that hands events to the
+client above, and the surfaces that would actually call `captureAnalyticsEvent`, are separate,
+not-yet-started work — so nothing calls `posthog.capture` yet.
 
 **Renaming an event is not retroactive.** Once a name has been captured, historical rows keep the
 old name forever — a rename does not rewrite them, it splits one funnel into two spellings. Get
@@ -403,5 +418,8 @@ needs a personal API key with `query:read`, `event_definition:read` and
 `property_definition:read`, and whatever PostHog holds reaches the agent's context — so
 autocapture, which records form input outside the event catalog, must stay off in the project it
 reads. Rationale and the live-verification checklist: `docs/specs/ai-44-posthog-mcp.md`.
+`POSTHOG_API_HOST` is PostHog's **private** app host, `us.posthog.com` / `eu.posthog.com` — not the
+**ingestion** host `NEXT_PUBLIC_POSTHOG_HOST` holds (`us.i.posthog.com` / `eu.i.posthog.com`). The
+two are easy to confuse, and mixing them up 404s with no obvious cause.
 
 Approve each server when your MCP client prompts on first run.
