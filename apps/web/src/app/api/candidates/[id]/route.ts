@@ -1,11 +1,18 @@
-import { db } from "@talentscout/db/client";
 import { z } from "zod";
+
+import { loadCandidateProfile } from "@/lib/candidates";
+import { DatabaseTimeoutError } from "@/lib/database-timeout";
+import { createCorrelationId, logServerError } from "@/lib/logger";
 
 import { candidateParams, type CandidateResponse, type ErrorResponse } from "./schema";
 
 // Live data — without both this and the `Cache-Control` header below, Next prerenders the
 // route at build time and serves a stale candidate.
 export const dynamic = "force-dynamic";
+
+// Applied to every branch, error responses included — a cached 400/404/500 outlives the
+// condition that caused it.
+const NO_STORE = { "Cache-Control": "no-store" };
 
 export async function GET(
   request: Request,
@@ -20,34 +27,18 @@ export async function GET(
       issues: z.treeifyError(parsed.error),
     };
 
-    return Response.json(body, { status: 400 });
+    return Response.json(body, { status: 400, headers: NO_STORE });
   }
 
   // TODO: authorization
 
   try {
-    const candidate = await db.query.candidates.findFirst({
-      where: (c, { eq }) => eq(c.id, parsed.data.id),
-      columns: { resumeText: false }, // never load the RAG-sized body
-      with: {
-        applications: {
-          columns: { id: true, jobId: true, stage: true, appliedAt: true, stageChangedAt: true },
-          orderBy: (a, { desc }) => [desc(a.appliedAt)],
-          with: {
-            job: { columns: { id: true, title: true } },
-            transitions: {
-              columns: { id: true, fromStage: true, toStage: true, occurredAt: true, reason: true },
-              orderBy: (t, { asc }) => [asc(t.occurredAt), asc(t.id)],
-            },
-          },
-        },
-      },
-    });
+    const candidate = await loadCandidateProfile(parsed.data.id);
 
     if (!candidate) {
       const body: ErrorResponse = { error: "Candidate not found" };
 
-      return Response.json(body, { status: 404 });
+      return Response.json(body, { status: 404, headers: NO_STORE });
     }
 
     const payload: CandidateResponse = {
@@ -82,12 +73,23 @@ export async function GET(
       })),
     };
 
-    return Response.json(payload, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(payload, { headers: NO_STORE });
   } catch (error) {
-    console.error("GET /api/candidates/[id] failed", error);
+    const correlationId = createCorrelationId();
+    logServerError("GET /api/candidates/[id] failed", {
+      correlationId,
+      error,
+      candidateId: parsed.data.id,
+    });
 
-    const body: ErrorResponse = { error: "Internal server error" };
+    const body: ErrorResponse = {
+      error:
+        error instanceof DatabaseTimeoutError
+          ? "Timed out loading candidate"
+          : "Internal server error",
+      correlationId,
+    };
 
-    return Response.json(body, { status: 500 });
+    return Response.json(body, { status: 500, headers: NO_STORE });
   }
 }

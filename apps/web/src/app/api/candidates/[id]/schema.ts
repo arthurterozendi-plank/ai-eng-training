@@ -39,8 +39,12 @@ export type CandidateResponse = {
   }>;
 };
 
-/** Payload returned by every non-2xx response from this route. */
+/**
+ * Payload returned by every non-2xx response from this route. A `500` carries `correlationId`,
+ * the id its server log line was written under — quote it to find the detail.
+ */
 export type ErrorResponse = {
   error: string;
   issues?: unknown;
+  correlationId?: string;
 };
