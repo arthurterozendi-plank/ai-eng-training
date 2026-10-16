@@ -82,28 +82,30 @@ Show:
 
 - Input typed as `Request`, not `NextRequest`, so a handler carries no `next/server` coupling and
   a test calls it with a plain `new Request(...)` and no server (Section C). Both routes that read
-  input do this (`jobs/route.ts:83`, `candidates/[id]/route.ts:10-11`); `status/route.ts` takes no
+  input do this (`jobs/route.ts:83`, `candidates/[id]/route.ts:17-18`); `status/route.ts` takes no
   argument at all.
 - `safeParse` and an early `400`, before any I/O. Both route tests assert the database was never
-  touched on a `400` (`jobs/route.test.ts:153`, `candidates/[id]/route.test.ts:132`).
+  touched on a `400` (`jobs/route.test.ts:153`, `candidates/[id]/route.test.ts:139`).
 - `try`/`catch` around the read, with `console.error` prefixed `<METHOD> /api/<path>` so a
-  server log line names its route (`jobs/route.ts:101-114`, `candidates/[id]/route.ts:28,86-92`).
+  server log line names its route (`jobs/route.ts:101-114`). `candidates/[id]/route.ts:77-94`
+  is the hardened form: `logServerError` from `@/lib/logger` writes the same prefix as one JSON
+  line under a fresh correlation id, and the `500` body returns that id.
 
 ## B — the local facts
 
-| Fact                                                                                                                                                                                                                                                                           | Evidence                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| Dynamic segments type their context with the Next 16 global `RouteContext<"/api/candidates/[id]">`                                                                                                                                                                             | `candidates/[id]/route.ts:12`; Next docs, "Route Context Helper" |
-| zod 4 top-level formats — `z.uuid()`, `z.email()`, `z.url()` — not `z.string().uuid()`                                                                                                                                                                                         | `candidates/[id]/schema.ts:5`; zod `^4.4.3`                      |
-| Search params arrive as strings; numeric fields need `z.coerce`, parsed via `Object.fromEntries(new URL(request.url).searchParams)`                                                                                                                                            | `jobs/schema.ts:14`; `jobs/route.ts:84-86`                       |
-| A list endpoint caps its result set with an exported `MAX_*` constant — never unbounded                                                                                                                                                                                        | `jobs/schema.ts:4,14` and its JSDoc                              |
-| Project columns at the query and map the response field by field                                                                                                                                                                                                               | `candidates/[id]/route.ts:31,53-83`                              |
-| A `Date` becomes an ISO string at the wire boundary via `.toISOString()`                                                                                                                                                                                                       | `candidates/[id]/route.ts:65-66`                                 |
-| An endpoint with no input has no `schema.ts` — the exception to the root's `route.ts` + `schema.ts` + `route.test.ts` contents rule, not to one directory per endpoint. It exports its own payload type from `route.ts` for the same reason                                    | `status/route.ts:3-9`; `status/` has no `schema.ts`              |
-| **A fact, not a convention:** no auth scheme exists yet and no ticket owns one, so routes ship unauthenticated with `// TODO: authorization` after validation. Do not invent a scheme and do not read this as settled                                                          | `candidates/[id]/route.ts:26`                                    |
-| `console.error`/`console.warn` are allowed; `console.log`/`console.debug` fail `/pre-deploy`                                                                                                                                                                                   | `.claude/skills/pre-deploy/scripts/check-console.sh`             |
-| Errors use the exported `ErrorResponse`, its `issues` populated with `z.treeifyError` on a validation failure and omitted otherwise (`404`/`500` carry `error` alone). **`jobs/route.ts` hand-maps its own `issues` array instead — a known deviation, not the shape to copy** | `candidates/[id]/schema.ts:42-46` vs `jobs/route.ts:92-95`       |
-| `Cache-Control: no-store` goes on **every** response, 400/404/500 included. **`candidates/[id]/route.ts` sets it on the `200` only — a known deviation**                                                                                                                       | `jobs/route.ts:15` vs `candidates/[id]/route.ts:85`              |
+| Fact                                                                                                                                                                                                                                                                                                       | Evidence                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Dynamic segments type their context with the Next 16 global `RouteContext<"/api/candidates/[id]">`                                                                                                                                                                                                         | `candidates/[id]/route.ts:19`; Next docs, "Route Context Helper" |
+| zod 4 top-level formats — `z.uuid()`, `z.email()`, `z.url()` — not `z.string().uuid()`                                                                                                                                                                                                                     | `candidates/[id]/schema.ts:5`; zod `^4.4.3`                      |
+| Search params arrive as strings; numeric fields need `z.coerce`, parsed via `Object.fromEntries(new URL(request.url).searchParams)`                                                                                                                                                                        | `jobs/schema.ts:14`; `jobs/route.ts:84-86`                       |
+| A list endpoint caps its result set with an exported `MAX_*` constant — never unbounded                                                                                                                                                                                                                    | `jobs/schema.ts:4,14` and its JSDoc                              |
+| Project columns at the query and map the response field by field                                                                                                                                                                                                                                           | `lib/candidates.ts:20`; `candidates/[id]/route.ts:44-75`         |
+| A `Date` becomes an ISO string at the wire boundary via `.toISOString()`                                                                                                                                                                                                                                   | `candidates/[id]/route.ts:56-57`                                 |
+| An endpoint with no input has no `schema.ts` — the exception to the root's `route.ts` + `schema.ts` + `route.test.ts` contents rule, not to one directory per endpoint. It exports its own payload type from `route.ts` for the same reason                                                                | `status/route.ts:7-19`; `status/` has no `schema.ts`             |
+| **A fact, not a convention:** no auth scheme exists yet and no ticket owns one, so routes ship unauthenticated with `// TODO: authorization` after validation. Do not invent a scheme and do not read this as settled                                                                                      | `candidates/[id]/route.ts:33`                                    |
+| `console.error`/`console.warn` are allowed; `console.log`/`console.debug` fail `/pre-deploy`                                                                                                                                                                                                               | `.claude/skills/pre-deploy/scripts/check-console.sh`             |
+| Errors use the exported `ErrorResponse`, its `issues` populated with `z.treeifyError` on a validation failure and omitted otherwise (a `404` carries `error` alone; a `500` adds `correlationId`). **`jobs/route.ts` hand-maps its own `issues` array instead — a known deviation, not the shape to copy** | `candidates/[id]/schema.ts:42-50` vs `jobs/route.ts:92-95`       |
+| `Cache-Control: no-store` goes on **every** response, 400/404/500 included — a cached `500` outlives the outage it reports                                                                                                                                                                                 | `jobs/route.ts:15`, `candidates/[id]/route.ts:15`                |
 
 ## C — testing a handler
 
@@ -112,15 +114,15 @@ Show:
   `vi.hoisted(...)` — the two are separate top-level calls, never `vi.hoisted(() => vi.mock(...))`.
   **Required, not stylistic**,
   for two stacked reasons the repo already documents: `db` throws `EnvValidationError` at module
-  load when `DATABASE_URL` is unset under Vitest (`candidates/[id]/route.test.ts:8-11`), and
+  load when `DATABASE_URL` is unset under Vitest (`candidates/[id]/route.test.ts:9-12`), and
   `vi.mock`'s factory is hoisted above every `const` in the file (`jobs/route.test.ts:6-7`).
 - A dynamic segment is called as `GET(request, { params: Promise.resolve({ id }) })`
-  (`candidates/[id]/route.test.ts:73-75`).
+  (`candidates/[id]/route.test.ts:74-76`).
 - Silence an expected log with `vi.spyOn(console, "error").mockImplementation(...)` and assert it
   was called (`jobs/route.test.ts:157-168`).
 - **Give the no-leak assertions teeth:** the fixture deliberately carries fields the projection
   drops (`resumeText`, `changedBy`) so the test fails if someone later spreads the row
-  (`candidates/[id]/route.test.ts:22-23,164-176`).
+  (`candidates/[id]/route.test.ts:23-24,211-222`).
 
 ## D — do not
 
@@ -142,6 +144,8 @@ Show:
   so the page hits the ORM rather than its own HTTP surface. Put that loader in `src/lib/`:
   `jobs/route.ts` exports `loadOpenJobs` from the handler file instead, which its own JSDoc calls
   out as a footprint compromise (`jobs/route.ts:21-24`), and the root reserves `route.ts` for
-  handler logic. Copy the direct import (`jobs/page.tsx:5`), not its location.
+  handler logic. Copy the direct import (`jobs/page.tsx:5`), not its location —
+  `lib/candidates.ts` is the loader in the right place, shared by `candidates/[id]/page.tsx` and
+  its route.
 - Do not add `export const revalidate` / `fetchCache` / `dynamicParams` to a handler as "cache
   safety". They are unrelated to `force-dynamic` and `Cache-Control: no-store`.

@@ -6,7 +6,7 @@ leaves open, and the failure modes agents actually hit here — read it after th
 of it.
 
 Governs every component directory here, plus the shadcn primitives in `ui/`. The citations below
-name the four that exist today.
+name the five that exist today.
 
 ## A. The skeleton
 
@@ -38,8 +38,9 @@ export { StatusBadge };
 
 The one contract the root does not state: destructure `className`, merge it **last** through
 `cn(base, className)` so a caller's class wins a Tailwind conflict, and spread `...props` onto the
-root element so the intrinsic tag's own props keep working. Both of our components that take a
-`className` do this (`job-card.tsx:13-25`, `candidate-profile.tsx:63-68`); `settings-form` takes no
+root element so the intrinsic tag's own props keep working. All three of our components that take
+a `className` do this (`job-card.tsx:13-25`, `candidate-profile.tsx:63-68`,
+`error-fallback.tsx:10-29`); `settings-form` takes no
 props and `theme-toggle` forwards to `<Button>` without merging one of its own. The `ui/`
 primitives differ — `button.tsx:61` routes `className` through `cva`, which is theirs alone.
 
@@ -49,7 +50,7 @@ primitives differ — `button.tsx:61` routes `className` through `cva`, which is
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Private sub-components stay unexported in the same file — they do not get their own directory                                                                              | `candidate-profile.tsx` holds `ApplicationSection`, `DetailRow`, `DetailLink`     |
 | A `data-*` attribute marks state a test asserts, not just styling                                                                                                          | `job-card.tsx:44` (`data-terminal`), asserted `job-card.test.tsx:50-51`           |
-| Props take rich types (`Date`, `PipelineStageKey`); the page converts, the component does not                                                                              | `candidate-profile.tsx:36` takes `Date`; `candidates/[id]/page.tsx:60` passes one |
+| Props take rich types (`Date`, `PipelineStageKey`); the page converts, the component does not                                                                              | `candidate-profile.tsx:36` takes `Date`; `candidates/[id]/page.tsx:81` passes one |
 | An absent optional field renders nothing — return `null`, do not render an empty row                                                                                       | `candidate-profile.tsx:149-160`                                                   |
 | An empty collection gets explicit copy, not a blank region                                                                                                                 | `candidate-profile.tsx:88` ("No applications yet.")                               |
 | Bottom named export — `function X() {} … export { X }`. **`job-card.tsx` and `settings-form.tsx` use `export function` instead, a known deviation, not the shape to copy** | `ui/button.tsx:67`, `candidate-profile.tsx:184`                                   |
@@ -78,6 +79,7 @@ rule below carries the reason, not just the instruction.
 | ------------------- | -------- | ------------------------------------------------------------------------------------------ |
 | `job-card`          | server   | renders props only                                                                         |
 | `candidate-profile` | server   | renders props, sorts applications and their transitions locally                            |
+| `error-fallback`    | server   | renders props only — `candidates/[id]/error.tsx` imports it into a client boundary         |
 | `theme-toggle`      | client   | `useState` + `useLayoutEffect`; reads and writes the theme via `localStorage`/`matchMedia` |
 | `settings-form`     | client   | `usePreferences` reads and writes `localStorage`                                           |
 

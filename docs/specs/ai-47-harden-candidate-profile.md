@@ -3,7 +3,7 @@
 **Linear:** AI-47 · Type: Feature · Parent: AI-10 (Day 5)
 **Branch:** `arthurterozendi/ai-47-harden-one-feature-with-error-handling-and-health-checks-for`
 (isolated worktree, based on `origin/main` at `e46eee5`)
-**Status:** implemented. One item is open: where the operator doc lives (§8).
+**Status:** implemented and committed locally. One item is open: where the operator doc lives (§8.1).
 
 ---
 
@@ -263,9 +263,19 @@ genuinely stopped or blackholed Postgres produces these outcomes. That needs a l
       reason.
 - [x] AC 4: §5. Every new test targets a failure path except the two sanity "up/success" cases.
 - [x] AC 5: covered by the timeout tests on the page, the API and status (fake timers).
-- [x] `pnpm --filter @talentscout/web typecheck`, `lint` and `test` all pass, and
-      `pnpm exec prettier --check .` is clean. The known baseline reds do **not** apply on this
-      machine (§2), so any red is new.
+- [x] Measured 2026-10-16 (Node v22.20.0), workspace scripts run directly rather than through
+      Turbo. `pnpm --filter @talentscout/web typecheck` and `lint` are clean.
+      `pnpm --filter @talentscout/web test` reports **119/119 passing, 16 files** (baseline 93/11).
+      `pnpm --filter @talentscout/db test` reports 106/106 (untouched). `pnpm exec prettier --check .`
+      is clean.
+- [x] Each key property was broken on purpose and the suite went red each time:
+  - with the deadline removed, the 4 timeout tests fail;
+  - with `notFound()` moved inside the `try`, the 404 test fails;
+  - with a fresh id in the API body instead of the logged one, 2 tests fail;
+  - with `200` returned while unhealthy, 2 tests fail.
+- [x] `/pre-deploy`'s `check-console.sh` fails, but only on `apps/mcp-db/src/read-only.ts:23`.
+      That line is a JSDoc mention of `console.log` that already exists on `origin/main`, so it is
+      a baseline red, not this diff.
 - [ ] The operator doc is in its permanent home. **Open, see §8.** The draft is below.
 
 ---

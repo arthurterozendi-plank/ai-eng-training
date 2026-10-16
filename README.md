@@ -92,7 +92,7 @@ apps/
         CLAUDE.md         Component conventions
         ui/               shadcn/ui primitives (generated — edit freely, they are yours)
       hooks/              Client-side React hooks
-      lib/                Framework-agnostic helpers (cn, formatters)
+      lib/                Framework-free code (cn, formatters, the logger, data loaders)
       types/              Shared, app-wide types
       env.ts              NODE_ENV and NEXT_PUBLIC_APP_URL, zod-validated
 packages/
@@ -248,18 +248,58 @@ setting no longer moves the app.
 
 ## Routes
 
-| Route         | Purpose                                             |
-| ------------- | --------------------------------------------------- |
-| `/`           | Home page                                           |
-| `/api/status` | Liveness check — is the backend up and which build? |
+| Route         | Purpose                                                         |
+| ------------- | --------------------------------------------------------------- |
+| `/`           | Home page                                                       |
+| `/api/status` | Health check — can the backend reach its database, which build? |
 
 ```bash
-curl -s http://localhost:3000/api/status
-# {"status":"ok","environment":"development","uptimeSeconds":1,"timestamp":"..."}
+curl -si http://localhost:3000/api/status
+# 200 {"status":"ok","database":"ok","environment":"development","uptimeSeconds":1,"timestamp":"..."}
+# 503 {"status":"unhealthy","database":"unreachable","correlationId":"...","environment":...}
 ```
 
-`force-dynamic` + `Cache-Control: no-store`, so it is never prerendered or
-cached — a cached health check reports stale liveness.
+It runs `select 1` over the pooled `DATABASE_URL` — the path every request takes — bounded by the
+same 5-second deadline as feature reads (see [Failure handling](#failure-handling)). A refused or
+failing connection reports `database: "unreachable"`, one slower than the deadline `"timeout"`,
+both with **`503`**, not the `500` the API routes use for unexpected errors: the handler did its
+job, which is reporting a dependency down, and monitors and load balancers read `503` as
+"temporarily unavailable" where a `500` would look like the check itself crashing.
+
+`force-dynamic` + `Cache-Control: no-store` on both outcomes, so it is never prerendered or
+cached — a cached health check reports stale liveness, and a cached "ok" during an outage is the
+worst answer it could give.
+
+## Failure handling
+
+The candidate profile (`/candidates/[id]` and `GET /api/candidates/[id]`) is the feature taken all
+the way: a recruiter who hits a failure sees what happened and a way to try again, and the engineer
+they report it to can find the exact log line. `/jobs` predates it and has an inline retry but no
+correlation id.
+
+- **One JSON line per failure, no logging dependency.** `logServerError` in
+  `apps/web/src/lib/logger.ts` writes `level`, `message`, `correlationId`, `time`, the error's
+  name, message, code and stack, and any context, as a single line through `console.error`. Next
+  and Vercel capture stderr as-is, and a JSON line is searchable by id without a library to keep
+  current.
+- **A correlation id ties what the client saw to that line.** A random uuid is created where the
+  failure is caught. The API's `500` returns it as `correlationId`; the page shows it as
+  "Reference: …" under the explanation. It is opaque by construction — the detail, which can name
+  hosts and ports, stays in the log.
+- **Every database read gets 5 seconds, enforced in the app.** `withDatabaseTimeout`
+  (`apps/web/src/lib/database-timeout.ts`) is the only deadline that bounds the whole wait a
+  recruiter sees — pool queue, connect (postgres.js defaults to 30 s) and statement — and needs no
+  change to the shared `packages/db` client. It releases the _request_, not the connection: the
+  abandoned read holds its pooled connection until Postgres answers. It does not cancel the query,
+  because postgres.js 3.4.9's `Query.cancel()` drops the promise that rejects when the cancel
+  connection fails, which would surface as an unhandled rejection exactly when the database is in
+  trouble.
+- **Load failures are handled on the page; render errors by the boundary.** In production Next
+  replaces a Server Component error's message before it reaches `error.tsx`, so a boundary cannot
+  tell a timeout from an outage. The page therefore catches its own load and says which it was; a
+  segment `error.tsx` catches anything thrown after a successful load and quotes Next's `digest`,
+  the id Next prints beside the error in its own server log. `notFound()` is called outside the
+  load's `try`, since it works by throwing.
 
 ## Testing
 
