@@ -3,8 +3,10 @@
 **Linear:** AI-45 · Type: Feature · Parent: AI-10 (Day 5) · Milestone: Week 1 — Use AI: Workflow
 **Depends on:** AI-27 (PostHog setup — **still Todo, zero code**), AI-34 (domain model — done)
 **Blocks:** AI-46 (analytics gap audit), and read by AI-63 (NL-to-dashboard, Day 9)
-**Branch:** `feat/ai-45-funnel-analytics` (worktree `AI-ENG-Training-ai-45`, based on `origin/main` at e46eee5)
-**Status:** revised after harden round 1 (`CHANGES_REQUESTED`); every finding's disposition is in §6.
+**Branch:** `feat/ai-45-funnel-analytics`, based on `origin/main` at e46eee5; local only, never pushed
+**Status:** contract implemented (slices 1–5, commit b89690d) after four harden rounds (§6) and two
+review rounds (dispositions in the code comments that cite them). AC 1 is deferred; §8 is the
+current AC-by-AC audit.
 
 ---
 
@@ -474,7 +476,7 @@ the implementer's against real code, and the DoD statements already pin the obse
 Slices 1 → 2 → 3 → 4 are strictly ordered by import dependency. Slice 5 can be written in parallel with
 any of them. **Nothing waits on the two 🔴 escalations** — see §6 for why.
 
-1. [ ] **Property vocabulary and the closed-enum rule** — `apps/web/src/lib/analytics/properties.ts`
+1. [x] **Property vocabulary and the closed-enum rule** — `apps/web/src/lib/analytics/properties.ts`
        holding the uuid, source, stage and actor-role property schemas of §3.3 and their inferred
        types. The two database-derived vocabularies use **type-only** imports plus
        `as const satisfies readonly …[]`, never a runtime import (§2, bundle safety). JSDoc on every
@@ -488,7 +490,7 @@ any of them. **Nothing waits on the two 🔴 escalations** — see §6 for why.
        `satisfies` derivation rejects a string literal that is not a database source value — red if the
        derivation is ever loosened to `string[]`.
 
-2. [ ] **Catalog, naming convention, per-event schemas** — `events.ts` holding the ordered catalog
+2. [x] **Catalog, naming convention, per-event schemas** — `events.ts` holding the ordered catalog
        `ANALYTICS_EVENT_NAMES` (the six of §3.2, in that order, stored once), the name-pattern and
        irregular-verb constants, a per-name map of property schemas, a discriminated union over `name`,
        and the per-event types. Every properties schema rejects unknown keys.
@@ -524,7 +526,7 @@ any of them. **Nothing waits on the two 🔴 escalations** — see §6 for why.
        is green by construction today; it goes red if that type is ever widened to a string key to
        silence an error, which is the realistic way a name and its schema drift apart.
 
-3. [ ] **The capture choke point** — `capture.ts` exporting the `AnalyticsSink` type of §4 and
+3. [x] **The capture choke point** — `capture.ts` exporting the `AnalyticsSink` type of §4 and
        `captureAnalyticsEvent(event, sink)`: validate against the catalog schema for `event.name`, call
        the sink on success, and on failure log once via `console.error` and return without calling it.
        It returns `void` and never throws — a synchronous throw is caught, and a returned thenable gets
@@ -546,15 +548,15 @@ any of them. **Nothing waits on the two 🔴 escalations** — see §6 for why.
        a JavaScript caller, an `as any` cast, or a name left stale by a rename — and §1.4's own
        argument, that this catalog outlives its callers and is consumed by tickets that do not yet
        exist, is exactly what makes an unlisted name the realistic case rather than a defensive one.
-       **(regression guard)** no PostHog dependency appears in any workspace manifest or in the
-       lockfile, and no PostHog module, env key or client init exists anywhere under `apps/` or
-       `packages/`. Stated as behaviour rather than as a command: an earlier draft pinned a `git diff`
-       pathspec that was measured not to match the root manifest at all, which is the exact shape of a
-       check that reads like coverage and provides none. Green by construction if the plan is followed;
-       red if an implementer or a later ticket takes the PostHog dependency, the env key or the client
-       init _here_ instead of in AI-27 — which is the seam of §4 asserted rather than asserted-about.
+       **No PostHog seam guard — cut in review round 2.** An earlier version of this DoD asserted that
+       no PostHog dependency, module, env key or client init exists under `apps/` or `packages/`.
+       That is a property of _this ticket's diff_, not an invariant of the repository: any repo-state
+       form of it goes red the day AI-27 lands, because adding `posthog-js` to `apps/web` is AI-27's
+       entire scope, and a `git diff` against `origin/main` gives the identical shape for either
+       ticket. The seam of §4 is therefore held at code review, and `capture.test.ts` says so where
+       the test used to be.
 
-4. [ ] **The two emission rules and the walk tests** — add `eventsForStageTransition({ jobId,
+4. [x] **The two emission rules and the walk tests** — add `eventsForStageTransition({ jobId,
 applicationId, source, fromStage, toStage, actorRole })` to `events.ts`, returning `[]` when
        `fromStage` is null (Rule 1) or when `fromStage === toStage`, `[application_stage_changed,
 offer_made]` when `toStage` is `offer` (Rule 2), and a single `application_stage_changed`
@@ -586,7 +588,7 @@ offer_made]` when `toStage` is `offer` (Rule 2), and a single `application_stage
        draft asserted both. Red if a pre-submit event gains a dependency on submit-time data, and red
        if the draft id stops joining the two events it exists to join.
 
-5. [ ] **README decision entry and this spec** — a new **Analytics** section in `README.md`, placed
+5. [x] **README decision entry and this spec** — a new **Analytics** section in `README.md`, placed
        after **Database**, recording only the **decisions** and linking this document for the detail:
        the naming convention and its formal rule; the six event names; the uuid/closed-enum rule and
        its consequence that no candidate name, email or résumé text is representable; that
@@ -613,7 +615,7 @@ offer_made]` when `toStage` is `offer` (Rule 2), and a single `application_stage
 | 2   | **[BLOCKER]** `actor_role` cannot represent an anonymous job viewer      | **Adopted; the enum gains `visitor`.** §3.3 now defines `actor_role` as established by the **surface**, not by a session, with a four-value vocabulary and a definition per value. Chosen over the offered alternative (optional on `job_viewed`) because a required property with an explicit "not established" value distinguishes "we could not know" from "the call site forgot", because relaxing required→optional later is free while the reverse leaves permanent holes, and because `visitor` stays truthful after auth arrives so no rename is ever needed. The finding also exposed a **false claim in my own §3.3** — that `actor_role` lets the funnel exclude internal traffic — which is corrected in place and added to §7. Logged as 🟡 #19.                               |
 | 3   | **[SHOULD]** `AnalyticsSink` sync-vs-async undefined                     | **Adopted, with a stronger resolution than the one offered.** The critique's cheapest fix — declare `=> void`, document that async adapters must catch internally — was rejected: TypeScript silently accepts an `async` function where `=> void` is expected, so it is a rule the type system permits violating, which is the same class of thing as a DoD check that cannot fail. §4 now settles the signature as `(name, properties) => void \| Promise<void>` with `captureAnalyticsEvent` returning `void` and handling **both** a synchronous throw and a rejected thenable. Slice 3 gains an explicit unhandled-rejection DoD case. Logged as 🟡 #20.                                                                                                                                |
 | 4   | **[SHOULD]** `FUNNEL_ORDER` duplicates `ANALYTICS_EVENT_NAMES`           | **Adopted, including the simplification it unlocks.** `FUNNEL_ORDER` and its equality test are gone; the catalog is stored once, ordered, in `events.ts`. With the constant gone the fourth module held a single derivation, so it is gone too — `eventsForStageTransition` moves beside the catalog it derives from. §4 is down to three modules and the slice count is unchanged. Logged as 🟡 #21.                                                                                                                                                                                                                                                                                                                                                                                       |
-| 5   | **[SHOULD]** the promised `(regression guard)` marker appears nowhere    | **Adopted.** This is MEMORY's `vacuous-checks-in-dods` failure mode landing on my own honesty device, which makes it worse than an ordinary miss, not better. All four items the critique identified now carry the marker _and_ the specific edit that would make them fail: the schema-map key-set check (red if the `Record` type is widened), the `grep`/`git diff` seam checks (red if the PostHog dependency is taken here instead of in AI-27), and `check-env.sh` (red if an env key leaks in). §5's preamble now also states that an item with neither a present failure mode nor the marker does not belong in a DoD.                                                                                                                                                              |
+| 5   | **[SHOULD]** the promised `(regression guard)` marker appears nowhere    | **Adopted.** This is MEMORY's `vacuous-checks-in-dods` failure mode landing on my own honesty device, which makes it worse than an ordinary miss, not better. All four items the critique identified now carry the marker _and_ the specific edit that would make them fail: the schema-map key-set check (red if the `Record` type is widened), the `grep`/`git diff` seam checks (red if the PostHog dependency is taken here instead of in AI-27 — later cut entirely in review round 2 as a diff property, see slice 3), and `check-env.sh` (red if an env key leaks in). §5's preamble now also states that an item with neither a present failure mode nor the marker does not belong in a DoD.                                                                                       |
 | 6   | **[SHOULD]** repeated `offer_made` on re-offer is not in Risks           | **Adopted.** Verified the premise: `offer` is non-terminal, and the only constraint on transitions is `from <> to`, so `offer → rejected → offer` is legal even though no seeded path exercises it. Added to §7 as a distinct bullet from the funnel-over-both-names double count, with the mitigation the critique named — dedupe by `application_id` at query time. §2 also now records that nothing prevents leaving a terminal stage.                                                                                                                                                                                                                                                                                                                                                   |
 | 7   | **[NIT]** slices 1–2 below design altitude                               | **Adopted; pure deletion, as proposed.** Export identifiers, the literal refinement expression and the exact fixture strings are cut from slices 1–2; the DoDs now pin observable behaviour ("each uuid property's schema rejects a personal name…"). §5 gains a one-line statement of where the altitude line sits: event names, property names, types and required/optional are contract and stay; everything below that is the implementer's. `eventsForStageTransition` is the one identifier kept, because both §3.2 rules attach to it and the critique referenced it by name approvingly.                                                                                                                                                                                            |
 | 8   | **[NIT]** README slice restates the property contract and will drift     | **Adopted.** Slice 5 now records only the decisions — convention and formal rule, the six names, the uuid/closed-enum PII rule, the never-`candidate_id` rule, the sink seam, the rename one-way door — and links this document for the per-event table. The DoD gained a negative check: the section contains no per-event property table. This is CLAUDE.md's "record the reason, not the event" applied to my own draft.                                                                                                                                                                                                                                                                                                                                                                 |
@@ -798,8 +800,8 @@ the moment the doors actually close.
    half of AC 1 only, and must not be judged against "appear in PostHog".
    **Still open for the human:** who owns the sink adapter — extending AI-27's scope by one function is
    the cheapest option — and the fact that AI-46's gap audit will run against a catalog with **zero
-   live events**, which is a real input to how that ticket is written. **I cannot file the follow-up**
-   — no Linear tool is available in this session — so this needs a human either way.
+   live events**, which is a real input to how that ticket is written. As of 2026-10-16 AI-27 is
+   still Todo and no follow-up owning the sink adapter has been filed; that needs a human either way.
 
 ---
 
@@ -900,3 +902,45 @@ the moment the doors actually close.
   a dropped event and a `console.error`, not a trimmed one. That is the intended behaviour for AC 4,
   but it means a sloppy call site loses data rather than degrading — worth knowing when the first one
   is written.
+
+---
+
+## 8. Status audit — 2026-10-16
+
+Re-run on this branch after rebasing onto `origin/main` at e46eee5 (a no-op: `origin/main` has not
+moved since the contract commit). Both hard constraints of §1 still hold: AI-27 is Todo with no
+PostHog code anywhere, and `apps/web/src/app/` holds the same four pages and three API routes, so no
+emit surface from §3.5 exists yet.
+
+| AC  | Status                                                           | Evidence, or the reason it is deferred                                                                                                                                                                                           |
+| --- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Deferred.** Emission half met                                  | `events.test.ts` "a full walk through captureAnalyticsEvent records all six names, in order…". "Appear in PostHog" needs a live project (AI-27), a sink adapter (unowned, 🔴 #2) and the six emit surfaces (§3.5) — none exists. |
+| 2   | **Met**                                                          | Documented in README **Analytics**, §3.1 and the JSDoc on `ANALYTICS_EVENT_NAME_PATTERN`; enforced by `events.test.ts` "AC 2 — naming convention".                                                                               |
+| 3   | **Met at the contract level**                                    | `events.test.ts`'s four "AC 3" blocks. That a _real_ emit carries the right values is the call sites' job and is deferred with them.                                                                                             |
+| 4   | **Met for the catalog.** AI-27 owes the hole outside it          | `events.test.ts`'s three "AC 4" blocks and the funnel walk. Autocapture and session recording can still leak form input from outside the catalog; disabling them is AI-27's (§7).                                                |
+| 5   | **Met at the contract level.** A real abandoned flow is deferred | `events.test.ts` "AC 5 — application_started and resume_uploaded are satisfiable pre-submit" and the abandoned-walk test. Demonstrating it on a real flow needs the apply surfaces.                                              |
+
+**Each claim above was broken on purpose and watched go red** (`vitest run src/lib/analytics`, 214
+tests green before and after):
+
+| Deliberate break                                                         | Result                                                |
+| ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Rule 1 removed — a null `fromStage` allowed to emit                      | 7 failed                                              |
+| `application_started` accepts an optional `application_id` (AC 5 undone) | 2 failed                                              |
+| Irregular past-tense allow-list emptied (AC 2)                           | 1 failed — `offer_made`'s final segment is past tense |
+| `offer_made` renamed in the catalog only                                 | suite fails to load; `tsc` reports 17 errors          |
+| `job_id` typed as `z.string()` (AC 4)                                    | 17 failed                                             |
+| Offer fan-out dropped, and non-offer transitions returned twice (Rule 2) | 8 failed                                              |
+| Catalog lookup in `captureAnalyticsEvent` unguarded                      | 4 failed                                              |
+
+**Remaining plan: no further code belongs in this ticket.** What is still owed sits outside it:
+
+1. **AI-27** — the PostHog project and key, and a client init with autocapture and session recording
+   off, development traffic separated from production, and no `identify()` (§7).
+2. **The sink adapter** — one function over AI-27's client. Unowned (🔴 #2).
+3. **The six emit surfaces** — §3.5. Four owners are unknown; AI-112 owns the stage-change writer.
+4. **AC 1's live walk** — possible only once 1–3 exist. It is also the first thing AI-46's audit
+   needs.
+
+The PR for this ticket claims AC 2–5 at the contract level and the emission half of AC 1, and says
+plainly that AC 1 is not met.
