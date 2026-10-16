@@ -277,6 +277,14 @@ the way: a recruiter who hits a failure sees what happened and a way to try agai
 they report it to can find the exact log line. `/jobs` predates it and has an inline retry but no
 correlation id.
 
+How to tell a hardened feature is broken lives in **`docs/runbooks/`**, one file per feature —
+[`candidate-profile.md`](docs/runbooks/candidate-profile.md) is the first. Runbooks are kept apart
+from `docs/specs/` because a spec records a ticket's design as it was built and is not revisited,
+while a runbook has to describe the system as it runs now and changes whenever the failure
+behaviour does; this README records the decisions behind that behaviour, not the procedure for
+diagnosing it. Production hardening (AI-122) extends the folder as more features get this
+treatment.
+
 - **One JSON line per failure, no logging dependency.** `logServerError` in
   `apps/web/src/lib/logger.ts` writes `level`, `message`, `correlationId`, `time`, the error's
   name, message, code and stack, and any context, as a single line through `console.error`. Next

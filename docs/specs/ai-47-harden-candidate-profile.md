@@ -3,7 +3,8 @@
 **Linear:** AI-47 · Type: Feature · Parent: AI-10 (Day 5)
 **Branch:** `arthurterozendi/ai-47-harden-one-feature-with-error-handling-and-health-checks-for`
 (isolated worktree, based on `origin/main` at `e46eee5`)
-**Status:** implemented and committed locally. One item is open: where the operator doc lives (§8.1).
+**Status:** implemented and committed locally. Operator runbook:
+[`docs/runbooks/candidate-profile.md`](../runbooks/candidate-profile.md).
 
 ---
 
@@ -37,6 +38,8 @@ all. If the database failed, the page threw straight into Next's default error p
 - `/api/status` extended with a bounded database check.
 - Failure-path tests, a README entry, and corrections to the module `CLAUDE.md` citations this
   diff moves.
+- The ticket's short doc on how to tell the feature is broken, as the runbook
+  `docs/runbooks/candidate-profile.md`.
 
 ### Out of scope (from the ticket)
 
@@ -205,6 +208,7 @@ not load", so it stays outside.
 | `apps/web/src/app/api/status/route.ts` + test                         | database check, `503` when unhealthy                                      |
 | `README.md`                                                           | failure-handling decisions; `/api/status` contract                        |
 | `apps/web/src/app/api/CLAUDE.md`, `apps/web/src/components/CLAUDE.md` | citations this diff moves; the fixed deviation                            |
+| `docs/runbooks/candidate-profile.md`                                  | new: how to tell the feature is broken                                    |
 
 No new dependency, no new env key, no `packages/db` change.
 
@@ -248,6 +252,9 @@ genuinely stopped or blackholed Postgres produces these outcomes. That needs a l
    monitor treats both as unhealthy, so the extra mechanism was not worth it.
 6. **The `ErrorFallback` heading is an `<h1>`.** Both callers replace the page's whole content, and
    the candidate page otherwise has no `<h1>` when the profile fails to render.
+7. **The operator doc lives in a new `docs/runbooks/` folder** (user, 2026-10-16). It is not kept in
+   this spec, which records a design at the time it was built, nor in the README, which records
+   decisions rather than procedures. AI-122 (production hardening) extends the folder.
 
 ---
 
@@ -276,54 +283,18 @@ genuinely stopped or blackholed Postgres produces these outcomes. That needs a l
 - [x] `/pre-deploy`'s `check-console.sh` fails, but only on `apps/mcp-db/src/read-only.ts:23`.
       That line is a JSDoc mention of `console.log` that already exists on `origin/main`, so it is
       a baseline red, not this diff.
-- [ ] The operator doc is in its permanent home. **Open, see §8.** The draft is below.
+- [x] The operator doc is in its permanent home:
+      [`docs/runbooks/candidate-profile.md`](../runbooks/candidate-profile.md).
 
 ---
 
 ## 8. Open questions
 
-1. **Where does the "how to tell it is broken" doc live?** The repository has no settled home for
-   operator docs. `docs/specs/` holds per-ticket designs, `docs/walkthroughs/` holds session
-   narratives, and the README records decisions rather than runbooks. The options are:
-   - (a) keep it in this spec;
-   - (b) a README subsection;
-   - (c) a new `docs/runbooks/candidate-profile.md`, a new home that AI-122 (production hardening)
-     would extend.
-
-   **Recommendation: (c).**
-
-2. **Should Postgres also enforce the timeout?** `statement_timeout` / `connect_timeout` on the
+1. **Should Postgres also enforce the timeout?** `statement_timeout` / `connect_timeout` on the
    shared client in `packages/db/src/client.ts` would release the abandoned statement and
    connection, not just the request. It affects every `db` caller, including future long
    analytics reads (AI-63), so it is not this ticket's call. Separately, Supabase's transaction
    pooler documents `prepare: false` for postgres.js, and `client.ts` does not set it. That was
    noticed here, not changed.
-3. **`503`/`504` for the candidate API?** They would be more precise than `500` for unavailable
+2. **`503`/`504` for the candidate API?** They would be more precise than `500` for unavailable
    and timeout. Adopting them adds codes to the root `CLAUDE.md` list for every route.
-
----
-
-## Draft: how to tell the candidate profile is broken (permanent home undecided, §8.1)
-
-**Symptoms a recruiter sees**
-
-- "We could not load this candidate just now" with a **Reference** id means the database read
-  failed. Nothing was lost; the page retries on "Try again".
-- "Loading this candidate took too long" with a **Reference** means the database answered nothing
-  within 5 s.
-- "Something went wrong showing this candidate" with a **Reference** means a render error after a
-  successful load, which is a bug rather than an outage.
-
-**Checks, in order**
-
-1. `curl -i <app>/api/status`.
-   - `200 {"status":"ok","database":"ok"}` means the database is reachable, so look for a bug.
-   - `503 {"database":"unreachable"}` means the database is down or refusing.
-   - `503 {"database":"timeout"}` means it is up but too slow.
-   - A bare `500` HTML page means the app's own config failed to load. Check `DATABASE_URL`.
-2. Search the server log for the **Reference** the recruiter quotes. Each failure is one JSON line:
-   `{"level":"error","message":"GET /api/candidates/[id] failed","correlationId":"<ref>","error":{…},"candidateId":"…"}`.
-   Page failures log `"/candidates/[id] failed to load the candidate"`. A boundary reference is
-   Next's own digest and appears in Next's own error log line.
-3. The API returns `500` with the same `correlationId` in its body, so a scripted caller can quote
-   it too.
