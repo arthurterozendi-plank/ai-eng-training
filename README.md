@@ -83,6 +83,7 @@ repositories](#related-repositories) explains.
 ```
 apps/
   mcp-db/                 @talentscout/mcp-db — stdio MCP server over the database (see MCP)
+  mcp-posthog/            @talentscout/mcp-posthog — stdio MCP server over PostHog analytics (see MCP)
   web/                    @talentscout/web — the Next.js application
     src/
       app/                App Router routes, layouts, route handlers
@@ -101,9 +102,10 @@ packages/
   typescript-config/      @talentscout/typescript-config — the tsconfig bases
 ```
 
-`apps/mcp-db` has no build or start script and nothing imports it, but it is deployed — to every
-engineer's Claude Code, through `.mcp.json` — which is what "deployable" means here; the CLI below
-is this layout's other deliberate exception, decided the opposite way.
+`apps/mcp-db` and `apps/mcp-posthog` have no build or start script and nothing imports them, but
+they are deployed — to every engineer's Claude Code, through `.mcp.json` — which is what
+"deployable" means here; the CLI below is this layout's other deliberate exception, decided the
+opposite way.
 
 **Two convention tiers.** The root `CLAUDE.md` holds rules that apply everywhere; the two folder
 `CLAUDE.md` files above hold the module-local detail it leaves out, and load when Claude reads any
@@ -152,10 +154,11 @@ into.
 Each workspace validates the keys it owns, in its own `src/env.ts` — the only module in that
 workspace allowed to touch `process.env`:
 
-| Workspace     | Owns                                  |
-| ------------- | ------------------------------------- |
-| `apps/web`    | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`     |
-| `packages/db` | `DATABASE_URL`, `DIRECT_DATABASE_URL` |
+| Workspace          | Owns                                                                 |
+| ------------------ | -------------------------------------------------------------------- |
+| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`                                    |
+| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                |
+| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY` |
 
 Ownership follows the code that reads the value, so a package carries its own contract instead
 of depending on an application to validate it for it. A workspace that needs another's value
@@ -173,6 +176,12 @@ reason is what such a key usually is: a developer's personal API key. Requiring 
 force a deploy environment to hold one person's credentials just to pass a check, which is worse
 than the drift it guards against. Local-only keys are still declared, so the drift check still
 reports a schema key that appears in neither section.
+
+`apps/mcp-posthog` is the one exception to failing at startup: `.mcp.json` launches it for every
+engineer, including ones with no PostHog key yet, and a server that dies at launch shows up in
+Claude Code as a bare "failed". So it always starts, and every tool call it cannot make names the
+missing or invalid keys instead. Its three keys ship empty in `.env.example`, so `/pre-deploy`'s
+env check reports them until they are filled in.
 
 ## Database
 
@@ -274,13 +283,13 @@ cached — a cached health check reports stale liveness.
 
 Tests live next to their subject as `*.test.ts(x)` under the workspace's `src/`. Each workspace
 configures its own Vitest: `apps/web` runs jsdom with Testing Library (setup in
-`apps/web/vitest.setup.ts`); `packages/db` and `apps/mcp-db` both run the node environment with no
-DOM at all — `apps/mcp-db`'s `vitest.config.mts` is copied from `packages/db`'s, the pattern to
-copy for the next workspace with no browser code.
+`apps/web/vitest.setup.ts`); `packages/db`, `apps/mcp-db` and `apps/mcp-posthog` run the node
+environment with no DOM at all — both MCP servers' `vitest.config.mts` is copied from
+`packages/db`'s, the pattern to copy for the next workspace with no browser code.
 
 ## MCP
 
-`.mcp.json` registers two servers.
+`.mcp.json` registers three servers.
 
 [chrome-devtools](https://github.com/ChromeDevTools/chrome-devtools-mcp) gives coding agents a
 real Chrome for navigation, DOM inspection, console logs, network traces, and performance traces.
@@ -299,5 +308,21 @@ statement can still take a lock, signal another backend, or (on a self-hosted Po
 database — so every call resets session state and releases advisory locks before it runs. `query`
 results are capped at 100 rows by default, with the exact total always stated and a per-call
 `maxRows` override up to 1000.
+
+`talentscout-posthog` (`apps/mcp-posthog`) lets an agent check instrumentation against what
+PostHog actually recorded instead of taking an engineer's word for it — the verify half of the
+instrument-then-verify loop. `check-event-fired` answers whether an event arrived in the last N
+minutes, `get-events` lists recent events with their full properties, and
+`get-event-definitions` lists every defined event with the properties PostHog has seen on it. Its
+design rests on one rule: **a failure is never an empty answer.** An invalid key, a missing scope,
+a rate limit, a timeout or an unreadable response is a tool error that says it concluded nothing;
+`NOT FIRED` comes only from a count PostHog actually returned as zero, and every query bypasses
+PostHog's result cache, because a cached zero is a false negative. Events are read through
+PostHog's HogQL `/query` endpoint, the documented replacement for its deprecated events API, with
+every caller-supplied string bound as a placeholder value rather than spliced into the query. It
+needs a personal API key with `query:read`, `event_definition:read` and
+`property_definition:read`, and whatever PostHog holds reaches the agent's context — so
+autocapture, which records form input outside the event catalog, must stay off in the project it
+reads. Rationale and the live-verification checklist: `docs/specs/ai-44-posthog-mcp.md`.
 
 Approve each server when your MCP client prompts on first run.

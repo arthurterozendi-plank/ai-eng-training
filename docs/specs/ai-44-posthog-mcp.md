@@ -269,6 +269,8 @@ days).
 | `TypeError` from `fetch`           | `network`      | the host                                                                      |
 | `TimeoutError`                     | `timeout`      | the limit (45 s)                                                              |
 | 2xx, but not JSON or wrong shape   | `malformed`    | that the response could not be read — never "no events"                       |
+| A `next` link on another origin    | `malformed`    | both origins; the key is not sent                                             |
+| More than 50 definition pages      | `too_large`    | the endpoint; no partial list is returned                                     |
 
 45 s covers PostHog's own worst case — up to 30 s queued plus 10 s executing. The API key never
 appears in a message: it only travels in the `Authorization` header.
