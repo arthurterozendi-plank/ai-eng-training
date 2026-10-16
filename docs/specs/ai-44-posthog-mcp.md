@@ -2,8 +2,10 @@
 
 **Linear:** AI-44 · Type: Chore · Parent: AI-10 · Milestone: Week 1 — Use AI: Workflow
 **Depends on:** AI-27 (unstarted — see §0) · **Blocks:** AI-46
+**Merges after:** AI-133, `arthurterozendi/ai-133-let-the-deploy-gate-skip-local-only-env-keys-for-engineers`
+(§0, decision 1)
 **Branch:** `arthurterozendi/ai-44-expose-posthog-analytics-over-mcp-for-engineers-verifying`
-(based on `origin/main` at `e46eee5`)
+(stacked on AI-133's branch at `2b96024`, itself based on `origin/main` at `e46eee5`)
 **Status:** planned and built against a **mocked** PostHog HTTP layer. The live-project halves of
 AC 1 and AC 3 are deferred to AI-27, not met.
 
@@ -19,25 +21,30 @@ response observed against a real project. Two of those claims — the HogQL text
 written, and `count()` arriving as a JSON number — can only be confirmed live, so they are listed
 in the live checklist (§5, slice 6) rather than claimed here.
 
-Open questions this ticket cannot settle on its own, each with the choice the branch makes for now:
+Questions this ticket could not settle on its own. Two are decided; one is still open.
 
-1. **`.env.example` vs the pre-deploy gate.** `CLAUDE.md` says every key a schema validates must be
-   in `.env.example`, "the deploy-time contract `/pre-deploy` checks against".
-   `.claude/skills/pre-deploy/scripts/check-env.sh` fails on any declared key with no value in the
-   process environment, `.env.production.local`, `.env.local` or `.env` — measured, not read off
-   the comments (§2). The three keys here are a local developer tool's, not the web app's, so a
-   deploy environment would have to carry a personal API key just to pass the gate. **Branch
-   choice:** follow the `CLAUDE.md` rule — the keys are in `.env.example`, empty — and accept that
-   `check-env.sh` reports them until AI-27 fills them in. Alternatives: teach `check-env.sh` a
-   local-only section, or keep the keys out of `.env.example` and accept its drift `WARN`.
-2. **Env key names.** No ticket names them. `POSTHOG_PERSONAL_API_KEY` is the name PostHog's own
-   API docs use in every example; `POSTHOG_PROJECT_ID` and `POSTHOG_API_HOST` follow the same
-   spelling. `POSTHOG_API_HOST` is deliberately not `NEXT_PUBLIC_POSTHOG_HOST`, which AI-27 owns
-   for the browser client and which points at the _ingestion_ host (§2).
-3. **No live verification script.** AI-43 shipped `pnpm mcp:verify`. A PostHog equivalent written
-   now could not be run once before merging, and adding it to the root `mcp:verify` Turbo task
-   would make that task need PostHog credentials too. **Branch choice:** none ships; §5 slice 6 is
-   the manual live checklist AI-27 (or the first AI-46 session) runs.
+1. **Decided — the PostHog keys are local-only, and this branch merges after AI-133.**
+   `CLAUDE.md` says every key a schema validates must be in `.env.example`, and
+   `.claude/skills/pre-deploy/scripts/check-env.sh` fails on any declared key with no value
+   (measured, §2). These three are a local developer tool's keys, so requiring them would force a
+   deploy environment to hold a personal API key just to pass the gate. The decision: a separate
+   PR, AI-133 (`arthurterozendi/ai-133-let-the-deploy-gate-skip-local-only-env-keys-for-engineers`),
+   teaches `check-env.sh` that keys below a line reading exactly `# @local-only` are declared but
+   never required to deploy; this branch puts the three keys below that line. **Why the merge
+   order matters:** without AI-133's change, `check-env.sh` reads the marker as an ordinary
+   comment and fails on the three empty keys — measured, with every deploy key set and the PostHog
+   keys empty, as exit 1 and `FAIL: unset or empty: POSTHOG_API_HOST POSTHOG_PROJECT_ID
+POSTHOG_PERSONAL_API_KEY`. This branch is stacked on AI-133's, so it carries the change: the
+   same run exits 0 and lists the three keys on its `NOTE` line, with no drift `WARN`. Merging
+   this branch first would land AI-133's commit with it, unreviewed as its own PR.
+2. **Decided — the env key names stay.** No ticket named them. `POSTHOG_PERSONAL_API_KEY` is the
+   name PostHog's own API docs use in every example; `POSTHOG_PROJECT_ID` and `POSTHOG_API_HOST`
+   follow the same spelling. `POSTHOG_API_HOST` is deliberately not `NEXT_PUBLIC_POSTHOG_HOST`,
+   which AI-27 owns for the browser client and which points at the _ingestion_ host (§2).
+3. **Open — no live verification script.** AI-43 shipped `pnpm mcp:verify`. A PostHog equivalent
+   written now could not be run once before merging, and adding it to the root `mcp:verify` Turbo
+   task would make that task need PostHog credentials too. **Branch choice for now:** none ships;
+   §5 slice 6 is the manual live checklist AI-27 (or the first AI-46 session) runs.
 
 ---
 
@@ -324,8 +331,9 @@ on this machine); no regression in the §2 baseline counts.
 - `main.ts`: stdio transport, stderr-only diagnostics, exit on stdin end.
 - **DoD:** spawning `pnpm --silent --filter @talentscout/mcp-posthog run mcp` and sending
   `initialize` + `tools/list` returns the three tools on stdout with nothing else on it, and a
-  `tools/call` with no config returns `isError` naming the key; `check-env.sh`, given every
-  pre-existing key in the process environment, reports exactly the three new keys.
+  `tools/call` with no config returns `isError` naming the key; with every deploy key in the
+  process environment and the three PostHog keys empty, `check-env.sh` (AI-133's, underneath this
+  branch) exits 0, lists them as local-only, and emits no drift `WARN` (§0, decision 1).
 
 ### Slice 6 — live checklist (deferred to AI-27, not run here)
 
@@ -353,7 +361,8 @@ Once `.env.local` holds a real key, project id and host:
 | D7  | Sequential property-definition calls                           | Parallel fan-out                     | Limits count per key; tens of events make parallelism irrelevant                   |
 | D8  | Refuse cross-origin `next` URLs                                | Follow any `next`                    | Following one would send the bearer token to whatever host the response names      |
 | D9  | `openWorldHint: true`                                          | Copy `talentscout-db`'s `false`      | This server talks to an external service                                           |
-| D10 | Unit tests over a fake `fetch` only; live proof is a checklist | A `mcp:verify` script                | §0 question 3                                                                      |
+| D10 | Unit tests over a fake `fetch` only; live proof is a checklist | A `mcp:verify` script                | §0 question 3 — still open                                                         |
+| D11 | The three keys go below `# @local-only` in `.env.example`      | Deploy keys, or left out of the file | A deploy must not need a personal API key; the keys must stay declared for drift   |
 
 ---
 

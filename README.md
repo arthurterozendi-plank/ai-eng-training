@@ -180,8 +180,8 @@ reports a schema key that appears in neither section.
 `apps/mcp-posthog` is the one exception to failing at startup: `.mcp.json` launches it for every
 engineer, including ones with no PostHog key yet, and a server that dies at launch shows up in
 Claude Code as a bare "failed". So it always starts, and every tool call it cannot make names the
-missing or invalid keys instead. Its three keys ship empty in `.env.example`, so `/pre-deploy`'s
-env check reports them until they are filled in.
+missing or invalid keys instead. Its three keys ship empty in `.env.example`'s `# @local-only`
+section: a developer tool's credentials, which a deploy never requires.
 
 ## Database
 
