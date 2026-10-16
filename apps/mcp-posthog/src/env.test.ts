@@ -9,9 +9,10 @@ describe("env", () => {
     delete process.env.POSTHOG_PERSONAL_API_KEY;
   });
 
-  it("names the key when it is unset", () => {
+  it("names the key and says it is not set when it is absent", () => {
     expect(() => env.POSTHOG_PERSONAL_API_KEY).toThrow(EnvValidationError);
-    expect(() => env.POSTHOG_PERSONAL_API_KEY).toThrow(/POSTHOG_PERSONAL_API_KEY/);
+    expect(() => env.POSTHOG_PERSONAL_API_KEY).toThrow(/POSTHOG_PERSONAL_API_KEY: is not set/);
+    expect(() => env.POSTHOG_API_HOST).toThrow(/POSTHOG_API_HOST: is not set/);
   });
 
   it("rejects the empty value .env.example ships with", () => {

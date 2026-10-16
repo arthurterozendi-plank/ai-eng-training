@@ -20,14 +20,21 @@ const PROJECT_ID_MESSAGE = "must be the numeric project ID from PostHog's projec
 const PERSONAL_API_KEY_MESSAGE =
   "must be a personal API key (phx_…), not the project token (phc_…) the browser SDK uses";
 
+/** Says "is not set" for an absent key, instead of zod's "expected string, received undefined". */
+function unsetOr(message?: string) {
+  return (issue: { input?: unknown }) => (issue.input === undefined ? "is not set" : message);
+}
+
+const UNSET = { error: unsetOr() };
+
 // `.claude/skills/pre-deploy/scripts/check-env.sh` finds validated keys by matching
 // `KEY: z.` at the start of a line, so each key's schema must be written out inline, on one
 // line — a schema Prettier wraps after `z` silently drops out of that check, which is why the
-// messages above are hoisted.
+// messages and options above are hoisted.
 const serverSchema = z.object({
-  POSTHOG_API_HOST: z.url({ protocol: /^https?$/, error: API_HOST_MESSAGE }),
-  POSTHOG_PROJECT_ID: z.string().regex(/^\d+$/, PROJECT_ID_MESSAGE),
-  POSTHOG_PERSONAL_API_KEY: z.string().startsWith("phx_", PERSONAL_API_KEY_MESSAGE),
+  POSTHOG_API_HOST: z.url({ protocol: /^https?$/, error: unsetOr(API_HOST_MESSAGE) }),
+  POSTHOG_PROJECT_ID: z.string(UNSET).regex(/^\d+$/, PROJECT_ID_MESSAGE),
+  POSTHOG_PERSONAL_API_KEY: z.string(UNSET).startsWith("phx_", PERSONAL_API_KEY_MESSAGE),
 });
 
 function parse<T extends z.ZodType>(schema: T, source: unknown, label: string): z.infer<T> {
