@@ -154,11 +154,11 @@ into.
 Each workspace validates the keys it owns, in its own `src/env.ts` — the only module in that
 workspace allowed to touch `process.env`:
 
-| Workspace          | Owns                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` |
-| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                                    |
-| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY`                     |
+| Workspace          | Owns                                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`         | `NODE_ENV`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, `POSTHOG_PROJECT_KEY`, `POSTHOG_INGEST_HOST` |
+| `packages/db`      | `DATABASE_URL`, `DIRECT_DATABASE_URL`                                                                                                  |
+| `apps/mcp-posthog` | `POSTHOG_API_HOST`, `POSTHOG_PROJECT_ID`, `POSTHOG_PERSONAL_API_KEY`                                                                   |
 
 Ownership follows the code that reads the value, so a package carries its own contract instead
 of depending on an application to validate it for it. A workspace that needs another's value
@@ -266,9 +266,24 @@ id are pseudonymous keys that only this database can join back to a person.
 **`captureAnalyticsEvent(event, sink)` takes its sink as an explicit argument**, which is the
 entire seam between this catalog and wherever an event actually goes. This repository ships the
 validated catalog and the one choke point every event passes through before it leaves the
-process; the catalog itself depends on nothing PostHog-specific. A sink that hands events to the
-client above, and the surfaces that would actually call `captureAnalyticsEvent`, are separate,
-not-yet-started work — so nothing calls `posthog.capture` yet.
+process; the catalog itself depends on nothing PostHog-specific.
+
+**Two sinks deliver to PostHog, one per runtime.** `posthogSink` (`posthog-sink.ts`) is the
+browser's: it waits for `startAnalytics` to settle before capturing, because `posthog-js` drops a
+capture made before `init` rather than queueing it, and an event fired on a page's first render
+would otherwise be lost. `posthogServerSink` (`posthog-server-sink.ts`) is the server's, over
+`posthog-node`, and imports `server-only` so it can never reach the browser bundle. It sends with
+`captureImmediate` and returns that promise, because a serverless function can be frozen before a
+queued event flushes; keeping the function alive until it settles is the caller's job. It reads
+its own server-only keys, `POSTHOG_PROJECT_KEY` and `POSTHOG_INGEST_HOST`, rather than the
+`NEXT_PUBLIC_` pair: they are never inlined into the browser bundle, and server events can be
+pointed at a different project from browser ones. Both sinks are silent when their key is unset —
+analytics off is not an error. Server events carry no `distinctId`, so PostHog gives each one a
+random id and no person profile, and no domain identity reaches it; joining a server event to a
+browser visitor is a decision for the call site that emits it.
+
+No surface calls `captureAnalyticsEvent` yet: the job detail page and apply form that would fire
+the browser half of the funnel are not built.
 
 **Renaming an event is not retroactive.** Once a name has been captured, historical rows keep the
 old name forever — a rename does not rewrite them, it splits one funnel into two spellings. Get
